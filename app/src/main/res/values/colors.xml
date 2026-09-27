@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- brand -->
+    <color name="brand">#0E7C66</color>
+    <color name="brand_mid">#12A182</color>
+    <color name="brand_dark">#075546</color>
+    <color name="brand_container">#E4F5F0</color>
+
+    <!-- semantic -->
+    <color name="ok">#15A05C</color>
+    <color name="bad">#D9483B</color>
+    <color name="warn">#C98A12</color>
+
+    <!-- surfaces -->
+    <color name="bg">#F3F7F6</color>
+    <color name="card">#FFFFFF</color>
+    <color name="stroke">#E3ECE9</color>
+
+    <!-- text -->
+    <color name="text">#0E211C</color>
+    <color name="text_dim">#677A74</color>
+
+    <!-- hero -->
+    <color name="hero_on">#7BF0C6</color>
+    <color name="hero_off">#FFB4A6</color>
+    <color name="hero_alarm">#FFD166</color>
+    <color name="hero_text_dim">#B9E4D8</color>
+</resources>

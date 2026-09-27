@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AutoReply AI</string>
+
+    <string name="svc_notif_label">AutoReply AI — মেসেজ রিডার</string>
+    <string name="svc_acc_label">AutoReply AI — রিপ্লাই সেন্ডার</string>
+    <string name="accessibility_description">WhatsApp-এ স্বয়ংক্রিয়ভাবে রিপ্লাই পাঠাতে এই সার্ভিসটি দরকার। এটি শুধু আপনার নিজের অ্যাপ চালু করা চ্যাট উইন্ডোতে \'Send\' বাটনে ট্যাপ করে।</string>
+
+    <string name="status_title">সার্ভিস স্ট্যাটাস</string>
+    <string name="notif_access">নোটিফিকেশন অ্যাক্সেস</string>
+    <string name="acc_service">অ্যাক্সেসিবিলিটি সার্ভিস</string>
+    <string name="battery_opt">ব্যাটারি অপটিমাইজেশন বন্ধ</string>
+    <string name="overlay_perm">অন্য অ্যাপের উপরে দেখানোর অনুমতি</string>
+    <string name="contacts_perm">কন্টাক্ট পড়ার অনুমতি</string>
+    <string name="granted">✓ চালু</string>
+    <string name="not_granted">✗ বন্ধ — ট্যাপ করুন</string>
+
+    <string name="master_title">মাস্টার সুইচ</string>
+    <string name="master_sub">বন্ধ থাকলে কোনো রিপ্লাই যাবে না</string>
+    <string name="auto_reply_enabled">অটো-রিপ্লাই চালু</string>
+
+    <string name="ai_title">AI সেটিংস</string>
+    <string name="ai_provider">AI প্রোভাইডার</string>
+    <string name="provider_name">প্রোভাইডারের নাম</string>
+    <string name="provider_name_hint">যেমন xkiro, openrouter, agentrouter</string>
+    <string name="delete_provider">এই প্রোভাইডার মুছুন</string>
+    <string name="add">নতুন</string>
+    <string name="ai_base">API Base URL</string>
+    <string name="ai_base_hint">OpenAI-compatible এন্ডপয়েন্ট</string>
+    <string name="ai_key">API Key</string>
+    <string name="ai_key_hint">sk-...</string>
+    <string name="ai_model">মডেল</string>
+    <string name="ai_model_hint">যেমন gpt-4o-mini / deepseek-chat</string>
+    <string name="persona">পারসোনা / নির্দেশনা</string>
+    <string name="persona_hint">তুমি আলী। অফিসে কাজ করো। ছোট বাক্যে, স্বাভাবিক বাংলায় লিখো।</string>
+    <string name="test_ai">AI টেস্ট করুন</string>
+
+    <string name="filter_title">কাকে রিপ্লাই দেবে</string>
+    <string name="only_contacts">শুধু নির্বাচিত কন্টাক্টকে</string>
+    <string name="only_contacts_sub">বন্ধ থাকলে সবার মেসেজে রিপ্লাই যাবে</string>
+    <string name="contact_list">কন্টাক্ট তালিকা (প্রতি লাইনে একটা নাম)</string>
+    <string name="contact_hint">আজমি\nআম্মু</string>
+    <string name="skip_groups">গ্রুপ চ্যাট বাদ দাও</string>
+    <string name="country_code">ডিফল্ট কান্ট্রি কোড</string>
+
+    <string name="hours_title">সময়সীমা</string>
+    <string name="hours_enabled">নির্দিষ্ট সময়ে রিপ্লাই</string>
+    <string name="hours_enabled_sub">শুধু অফিস আওয়ারে রিপ্লাই দেবে</string>
+    <string name="office_hours">অফিস টাইম</string>
+    <string name="hour_start">ঘণ্টা</string>
+    <string name="min_start">মিনিট</string>
+    <string name="hour_end">ঘণ্টা</string>
+    <string name="min_end">মিনিট</string>
+
+    <string name="behaviour_title">ব্যবহার</string>
+    <string name="delay_label">রিপ্লাইয়ের আগে অপেক্ষা (সেকেন্ড)</string>
+    <string name="delay_min">কম</string>
+    <string name="delay_max">বেশি</string>
+    <string name="delay_helper">এই রেঞ্জ থেকে র‍্যান্ডম সময় নেবে — যাতে যন্ত্রের মতো না লাগে। খোঁজখবর আর "হুম"-এর উত্তরে ১–২ সেকেন্ড।</string>
+    <string name="cooldown">কুলডাউন (সেকেন্ড)</string>
+    <string name="signature">রিপ্লাইয়ের শেষে যুক্ত করুন (ঐচ্ছিক)</string>
+    <string name="signature_hint">(কাজে আছি)</string>
+
+    <string name="logs_title">রিপ্লাই লগ</string>
+    <string name="clear_logs">লগ মুছুন</string>
+    <string name="refresh">রিফ্রেশ</string>
+    <string name="probe">পরীক্ষা</string>
+
+    <string name="save">সেভ করুন</string>
+    <string name="saved">সেভ হয়েছে ✓</string>
+    <string name="test_ok">AI কাজ করছে ✓</string>
+    <string name="test_fail">ব্যর্থ: %1$s</string>
+    <string name="no_logs">এখনো কোনো লগ নেই।</string>
+
+    <string name="fgs_title">AutoReply AI চালু আছে</string>
+    <string name="fgs_text">WhatsApp মেসেজ মনিটর করা হচ্ছে…</string>
+
+    <string name="help_title">কীভাবে চালাবেন</string>
+    <string name="help_body">১) উপরের ৫টি অনুমতি চালু করুন।\n২) AI ট্যাবে API Key ও মডেল দিন।\n৩) মাস্টার সুইচ চালু করে সেভ করুন।\n৪) ফোন রিস্টার্ট দিলেও অ্যাপ নিজে থেকে চালু হবে।\n\nস্ক্রিন বন্ধ থাকলেও রিপ্লাই যায় — অ্যাপ নোটিফিকেশন থেকেই সরাসরি পাঠায়।\n\nতবে PIN/ফিঙ্গারপ্রিন্ট দিয়ে ফোন লক করা থাকলে Android নিরাপত্তার কারণে রিপ্লাই পাঠানো যায় না। তাই কাজের সময় ফোন লক না রেখে স্মার্ট লক (trusted place) ব্যবহার করুন।</string>
+
+    <!-- ===== v1.2 UI ===== -->
+    <string name="hero_subtitle">WhatsApp · AI অটো-রিপ্লাই ইঞ্জিন</string>
+    <string name="state_on">চালু আছে</string>
+    <string name="state_off">বন্ধ আছে</string>
+    <string name="mood_sleeping">ঘুমের মোড</string>
+    <string name="mood_sleeping_on">ঘুমের মোড চালু — AI gatekeeper কাজ করছে</string>
+    <string name="mood_label">মুড সেটিংস</string>
+    <string name="mood_sub">মুড চালু থাকলে AI সবার মেসেজের উত্তর দেবে — "আমি assistant, Ali এখন ব্যস্ত"</string>
+    <string name="mood_assistant_hint">Assistant-এর নাম (যেমন: ক্ল, রোবট)</string>
+    <string name="mood_text_hint">Ali এখন কী করছে (যেমন: ঘুমাচ্ছে, রান্না করছে, খাবার খাচ্ছে)</string>
+    <string name="hero_on_hint">মেসেজ এলেই AI নিজে রিপ্লাই পাঠাবে</string>
+    <string name="hero_off_hint">চালু করতে ডান দিকের সুইচটি টিপুন</string>
+    <string name="permissions_title">প্রয়োজনীয় অনুমতি</string>
+    <string name="perm_summary">%1$d / %2$d সম্পন্ন</string>
+    <string name="perm_all_done">সব ঠিক আছে ✓</string>
+
+    <!-- ===== tabs ===== -->
+    <string name="tab_permissions">অনুমতি</string>
+    <string name="tab_ai">AI</string>
+    <string name="tab_contacts">কন্টাক্ট</string>
+    <string name="tab_context">কন্টেক্সট</string>
+    <string name="tab_timing">টাইমিং</string>
+    <string name="tab_logs">লগ</string>
+
+    <!-- ===== per-contact context ===== -->
+    <string name="context_intro">প্রতিটি কন্টাক্টের জন্য আলাদা কন্টেক্সট রাখতে পারবেন। AI শুধু সেই কন্টাক্টকে উত্তর দেওয়ার সময়ই তার কন্টেক্সট পড়বে — অন্য কারো কন্টেক্সট কখনো দেখবে না।</string>
+    <string name="safety_label">নিরাপত্তার নিয়ম</string>
+    <string name="safety_sub">এই নিয়মটি সব কন্টাক্টের জন্য সবসময় পাঠানো হয়।</string>
+    <string name="safety_hint">নিরাপত্তার নিয়ম</string>
+    <string name="contact_context_label">কন্টাক্ট অনুযায়ী কন্টেক্সট</string>
+    <string name="contact_context_sub">নাম হুবহু WhatsApp-এ যেভাবে দেখায় সেভাবে লিখুন।</string>
+    <string name="add_contact">+ নতুন কন্টাক্ট</string>
+    <string name="remove">মুছুন</string>
+    <string name="ctx_name_hint">কন্টাক্টের নাম</string>
+    <string name="ctx_body_hint">কন্টেক্সট / নির্দেশনা</string>
+    <string name="ctx_body_helper">এই কন্টাক্ট কে, সম্পর্ক কী, কীভাবে কথা বলবেন</string>
+
+    <string name="perm_intro">এই ৫টি অনুমতি ছাড়া অ্যাপ কাজ করবে না। প্রতিটা রো-তে ট্যাপ করে চালু করুন।</string>
+    <string name="logs_intro">কোন মেসেজে কী রিপ্লাই গেল, কোথায় আটকালো — সব এখানে।</string>
+    <string name="ai_intro">যেকোনো OpenAI-compatible এন্ডপয়েন্ট চলবে — OpenAI, OpenRouter, Groq, DeepSeek, Together।</string>
+    <string name="contacts_intro">ডিফল্টে সবার মেসেজে রিপ্লাই যাবে। নির্দিষ্ট কিছু মানুষকে রিপ্লাই দিতে চাইলে নিচের সুইচ চালু করে নাম লিখুন।</string>
+    <string name="timing_intro">কখন রিপ্লাই দেবে আর কত দ্রুত দেবে — সব এখানে।</string>
+    <string name="contact_hint_country">বাংলাদেশের জন্য 880</string>
+
+    <!-- ===== smart behaviour ===== -->
+    <string name="smart_triage">স্মার্ট আচরণ</string>
+    <string name="smart_triage_sub">AI নিজে বুঝবে কোন মেসেজের উত্তর দিতে হবে আর কেমন হবে। খোঁজখবরে সাথে সাথে ছোট উত্তর, "হুম"-এর উত্তরে "হুম", ফরওয়ার্ড বা স্প্যামে চুপ।</string>
+    <string name="hold_emotional">আবেগপূর্ণ মেসেজে নিজে উত্তর দেব</string>
+    <string name="hold_emotional_sub">কেউ খুব ব্যক্তিগত বা দুঃখের কথা লিখলে AI উত্তর দেবে না — আপনাকে নোটিফিকেশন দেবে, আপনি নিজে উত্তর দেবেন।</string>
+    <string name="fail_alert">ফেল করলে জানাবে</string>
+    <string name="fail_alert_sub">টানা ৩টা রিপ্লাই ব্যর্থ হলে নোটিফিকেশন দেবে — নইলে API বন্ধ হয়ে গেলেও টের পাবেন না।</string>
+
+    <!-- ===== never reply + backup + memory ===== -->
+    <string name="never_reply">কখনো রিপ্লাই দেব না</string>
+    <string name="never_reply_helper">প্রতি লাইনে একটা নাম — এদের কখনো অটো-রিপ্লাই যাবে না</string>
+    <string name="backup_label">ব্যাকআপ</string>
+    <string name="backup_sub">সব সেটিংস, কন্টাক্ট কন্টেক্সট আর মেমোরি একটা ফাইলে সেভ করুন। ফোন বদলালে বা রিসেট দিলে ইমপোর্ট করে ফিরিয়ে আনতে পারবেন।</string>
+    <string name="export">এক্সপোর্ট</string>
+    <string name="import_backup">ইমপোর্ট</string>
+    <string name="clear_memory">মেমোরি মুছুন</string>
+    <string name="memory_count">মনে আছে %1$d টা মেসেজ</string>
+
+
+
+</resources>
