@@ -206,6 +206,7 @@
     <string name="import_backup">ইমপোর্ট</string>
     <string name="clear_memory">মেমোরি মুছুন</string>
     <string name="memory_count">মনে আছে %1$d টা মেসেজ</string>
+    <string name="memory_count_stale">%1$d টা সাম্প্রতিক · %2$d টা পুরনো (আর পাঠানো হয় না)</string>
 
     <!-- ===== cloud backup ===== -->
     <string name="cloud_label">অনলাইন ব্যাকআপ</string>

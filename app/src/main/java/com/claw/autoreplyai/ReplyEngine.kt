@@ -9,6 +9,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Collections
@@ -111,6 +113,7 @@ object ReplyEngine {
         val remaining = p.cooldownSec * 1000L - (System.currentTimeMillis() - p.lastReply(sender))
         if (remaining > 0) {
             pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime)
+            persistPending(app)
             log(app, "কুলডাউনে — $sender (নতুন মেসেজটা পরে উত্তর দেওয়া হবে)")
             schedulePending(app, sender, remaining)
             return
@@ -119,6 +122,7 @@ object ReplyEngine {
         if (!inFlight.add(sender)) {
             // Same reasoning as the cooldown — never lose the message, queue it.
             pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime)
+            persistPending(app)
             log(app, "আগের রিপ্লাই চলছে — $sender (এই মেসেজটা পরে উত্তর দেওয়া হবে)")
             schedulePending(app, sender, 3_000L)
             return
@@ -137,6 +141,15 @@ object ReplyEngine {
 
     // ---------------------------------------------------- deferred replies
 
+    /**
+     * A message waiting for the cooldown to pass.
+     *
+     * [direct] and [contentIntent] are live objects — a notification action and a
+     * PendingIntent — and neither can be written to disk. They are therefore only
+     * restored on the in-process path. A copy recovered after a restart has to go
+     * through the accessibility route instead, which is exactly what happens today
+     * when the inline reply action is missing.
+     */
     private class Pending(
         val pkg: String,
         val sender: String,
@@ -144,11 +157,110 @@ object ReplyEngine {
         val phoneHint: String?,
         val direct: DirectReplier.Handle?,
         val contentIntent: PendingIntent?,
-        val postTime: Long
+        val postTime: Long,
+        /** When the message originally arrived — used to expire stale restored entries. */
+        val queuedAt: Long = System.currentTimeMillis()
     )
 
     private val pending = Collections.synchronizedMap(HashMap<String, Pending>())
     private val pendingScheduled: MutableSet<String> = Collections.synchronizedSet(HashSet())
+
+    /**
+     * Where the queue is mirrored so it survives the process being killed. Android
+     * reclaims a backgrounded app freely; losing a queued reply to memory pressure
+     * means the contact is simply never answered.
+     */
+    private const val PENDING_FILE = "pending_replies"
+    private const val PENDING_KEY = "queue"
+
+    /**
+     * A restored entry older than this is not worth sending — the contact has waited
+     * long enough that a reply now would be stranger than silence.
+     */
+    private const val PENDING_MAX_AGE_MS = 15 * 60 * 1000L
+
+    private fun persistPending(app: Context) {
+        try {
+            val arr = JSONArray()
+            val snapshot = synchronized(pending) { pending.entries.toList() }
+            for ((sender, v) in snapshot) {
+                arr.put(
+                    JSONObject()
+                        .put("sender", sender)
+                        .put("pkg", v.pkg)
+                        .put("message", v.message)
+                        .put("phoneHint", v.phoneHint ?: "")
+                        .put("postTime", v.postTime)
+                        .put("queuedAt", v.queuedAt)
+                )
+            }
+            app.getSharedPreferences(PENDING_FILE, Context.MODE_PRIVATE)
+                .edit().putString(PENDING_KEY, arr.toString()).apply()
+        } catch (e: Exception) {
+            log(app, "পেন্ডিং কিউ সেভ করা যায়নি: ${e.message}")
+        }
+    }
+
+    /**
+     * Rebuild the queue after a restart. Routeless entries are re-queued without
+     * [DirectReplier.Handle] and [PendingIntent]; `deliverReply` falls through to the
+     * accessibility route for them, which is the same thing it does when a
+     * notification offers no inline reply.
+     */
+    fun restorePending(app: Context) {
+        try {
+            val raw = app.getSharedPreferences(PENDING_FILE, Context.MODE_PRIVATE)
+                .getString(PENDING_KEY, null) ?: return
+            val arr = JSONArray(raw)
+            val now = System.currentTimeMillis()
+            var restored = 0
+            var expired = 0
+
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val sender = o.optString("sender")
+                val message = o.optString("message")
+                val queuedAt = o.optLong("queuedAt", 0L)
+                if (sender.isBlank() || message.isBlank()) continue
+
+                if (queuedAt <= 0L || now - queuedAt > PENDING_MAX_AGE_MS) {
+                    expired++
+                    continue
+                }
+
+                pending[sender] = Pending(
+                    pkg = o.optString("pkg"),
+                    sender = sender,
+                    message = message,
+                    phoneHint = o.optString("phoneHint").takeIf { it.isNotBlank() },
+                    direct = null,
+                    contentIntent = null,
+                    postTime = o.optLong("postTime", 0L),
+                    queuedAt = queuedAt
+                )
+                restored++
+            }
+
+            if (restored > 0 || expired > 0) {
+                log(
+                    app,
+                    "পেন্ডিং কিউ ফিরে এলো — $restored টা পাঠানো হবে" +
+                            if (expired > 0) ", $expired টা অনেক পুরনো তাই বাদ" else ""
+                )
+            }
+            // Nothing usable left; clear the file so it is not re-read next boot.
+            if (restored == 0) persistPending(app)
+
+            val p = Prefs.get(app)
+            for (sender in synchronized(pending) { pending.keys.toList() }) {
+                val v = pending[sender] ?: continue
+                val remaining = p.cooldownSec * 1000L - (now - p.lastReply(sender))
+                if (remaining > 0) schedulePending(app, sender, remaining) else schedulePending(app, sender, 1_000L)
+            }
+        } catch (e: Exception) {
+            log(app, "পেন্ডিং কিউ ফেরানো যায়নি: ${e.message}")
+        }
+    }
 
     private fun schedulePending(app: Context, sender: String, delayMs: Long, attempt: Int = 0) {
         if (!pendingScheduled.add(sender)) return
@@ -161,6 +273,15 @@ object ReplyEngine {
             val p = Prefs.get(app)
             if (!p.enabled) {
                 pending.remove(sender)
+                persistPending(app)
+                return@launch
+            }
+
+            // Give up on anything that has been waiting longer than a reply is worth.
+            if (System.currentTimeMillis() - msg.queuedAt > PENDING_MAX_AGE_MS) {
+                pending.remove(sender)
+                persistPending(app)
+                log(app, "পেন্ডিং মেসেজ বাদ (অনেক দেরি হয়ে গেছে) — $sender")
                 return@launch
             }
 
@@ -177,12 +298,14 @@ object ReplyEngine {
                     schedulePending(app, sender, 3_000L, attempt + 1)
                 } else {
                     pending.remove(sender)
+                    persistPending(app)
                     log(app, "পরে উত্তর দেওয়ার চেষ্টা ছেড়ে দেওয়া হলো — $sender")
                 }
                 return@launch
             }
 
             pending.remove(sender)
+            persistPending(app)
             try {
                 handle(app, p, msg.pkg, msg.sender, msg.message, msg.phoneHint, msg.direct, msg.contentIntent, msg.postTime)
             } catch (e: Exception) {
@@ -1046,6 +1169,41 @@ object ReplyEngine {
         6. ছোট, সরাসরি লেখো — বাংলায় স্বাভাবিক ভাষায়
         7. কোনো ব্যক্তিগত তথ্য শেয়ার করবে না
     """.trimIndent()
+
+    /**
+     * Headless check of the mood/gatekeeper path.
+     *
+     * That path builds its own prompt and parses a different JSON shape from the normal
+     * reply path, so an ordinary AI test passing proves nothing about it. The log line
+     * `gatekeeper উত্তর খালি` could not be reproduced at all before this existed,
+     * because nothing but a real incoming message could reach the mood handler.
+     */
+    suspend fun moodSelfTest(app: Context): String {
+        val p = Prefs.get(app)
+        val raw = askAi(
+            app,
+            listOf(
+                AiClient.Msg("system", buildGatekeeperPrompt(p, "পরীক্ষা")),
+                AiClient.Msg("user", "কি করছেন?")
+            )
+        )
+        if (raw.isBlank()) return "✗ মুড পরীক্ষা: খালি উত্তর"
+
+        val gd = try {
+            GatekeeperDecision.parse(raw)
+        } catch (t: Throwable) {
+            return "✗ মুড পরীক্ষা: JSON পার্স ব্যর্থ — ${raw.take(100)}"
+        }
+
+        val reply = fitReply(gd.reply, p.replyMaxChars)
+        return if (reply.isBlank()) {
+            // The exact failure seen in the log: parsing worked, reply was empty, so
+            // nothing was ever sent and the reason was never recorded.
+            "✗ মুড পরীক্ষা: action=${gd.action} কিন্তু reply ফাঁকা — ${raw.take(100)}"
+        } else {
+            "✓ মুড পরীক্ষা ঠিক আছে — action=${gd.action}, reply: ${reply.take(80)}"
+        }
+    }
 
     private data class GatekeeperDecision(
         val action: Action,

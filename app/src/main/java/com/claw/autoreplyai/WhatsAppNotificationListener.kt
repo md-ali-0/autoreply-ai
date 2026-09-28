@@ -55,6 +55,11 @@ class WhatsAppNotificationListener : NotificationListenerService() {
                 LogStore.add(applicationContext, "পরীক্ষা: এখন কোনো চ্যাট নোটিফিকেশন নেই")
                 return
             }
+            // Two chat notifications will legitimately produce one ✓ and one ✗ here —
+            // a group summary often carries no free-form reply while the per-message
+            // notification does. A ✗ is only meaningful for the chat that owns it, so
+            // name the notification rather than implying a single overall result.
+            val withReply = chats.count { DirectReplier.findReplyAction(it.notification) != null }
             for (sbn in chats) {
                 val n = sbn.notification
                 val hasReply = DirectReplier.findReplyAction(n) != null
@@ -65,6 +70,10 @@ class WhatsAppNotificationListener : NotificationListenerService() {
                             "সরাসরি reply ${if (hasReply) "আছে ✓" else "নেই ✗"}"
                 )
             }
+            LogStore.add(
+                applicationContext,
+                "পরীক্ষা: চ্যাট নোটিফিকেশন ${chats.size} টার মধ্যে $withReply টায় সরাসরি reply আছে"
+            )
         } catch (e: Exception) {
             LogStore.add(applicationContext, "পরীক্ষা ব্যর্থ: ${e.message}")
         }

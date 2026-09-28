@@ -13,6 +13,22 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         installCrashGuard()
+
+        // Bring back any reply that was queued when the process died. Android kills a
+        // backgrounded app freely, and without this a message waiting out its cooldown
+        // disappears for good.
+        //
+        // Deliberately isolated: the guard above is installed first, but if anything in
+        // it throws we would reach here with the app half-initialised, and the queue
+        // would silently stay empty — the exact failure this call exists to prevent.
+        try {
+            ReplyEngine.restorePending(this)
+        } catch (e: Throwable) {
+            LogStore.add(
+                this,
+                "পেন্ডিং কিউ ফেরানো যায়নি (বুট): ${e.javaClass.simpleName} — ${e.message ?: ""}"
+            )
+        }
     }
 
     /**

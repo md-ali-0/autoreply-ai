@@ -184,7 +184,16 @@ class ContextFragment : BaseSettingsFragment() {
         entry.memInfo.text = if (contact.isEmpty()) {
             ""
         } else {
-            getString(R.string.memory_count, ChatMemory.count(requireContext(), contact))
+            val ctx = requireContext()
+            val fresh = ChatMemory.activeCount(ctx, contact)
+            val total = ChatMemory.storedCount(ctx, contact)
+            // Say so explicitly when turns are being withheld for being old — otherwise
+            // the number dropping looks like data loss rather than ageing.
+            if (total > fresh) {
+                getString(R.string.memory_count_stale, fresh, total - fresh)
+            } else {
+                getString(R.string.memory_count, fresh)
+            }
         }
     }
 

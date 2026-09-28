@@ -11,8 +11,8 @@ android {
         applicationId = "com.claw.autoreplyai"
         minSdk = 28
         targetSdk = 35
-        versionCode = 49
-        versionName = "1.49"
+        versionCode = 51
+        versionName = "1.51"
     }
 
     buildTypes {

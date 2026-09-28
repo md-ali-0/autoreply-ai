@@ -1,5 +1,6 @@
 package com.claw.autoreplyai
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.View
@@ -56,31 +57,50 @@ class MainActivity : AppCompatActivity() {
         //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez selftest true
         //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez notiftest true
         //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez aitest true
+        //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez moodtest true
         //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez voicetest true
-        if (intent?.getBooleanExtra(EXTRA_SELFTEST, false) == true) {
-            ReplySelfTest.run(this)
-        }
-        if (intent?.getBooleanExtra(EXTRA_NOTIFTEST, false) == true) {
+        //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez navtest true
+        //
+        // All dispatched through one place. Two copies of this list is how `moodtest`
+        // came to exist in only one of them and silently never ran.
+        handleTestExtras(intent)
+    }
+
+    /**
+     * Headless test extras, handled here so they work whether the activity was just
+     * created or was already on top.
+     *
+     * `onCreate` alone is not enough: `adb shell am start --ez navtest true` delivered
+     * to an already-running MainActivity goes to `onNewIntent`, so the extra was
+     * silently ignored and the test looked like it had passed when it never ran.
+     */
+    private fun handleTestExtras(intent: Intent?) {
+        if (intent == null) return
+
+        if (intent.getBooleanExtra(EXTRA_SELFTEST, false)) ReplySelfTest.run(this)
+
+        if (intent.getBooleanExtra(EXTRA_NOTIFTEST, false)) {
             Notify.needsYou(
                 this,
                 "পরীক্ষা",
                 "এটা একটা পরীক্ষার নোটিফিকেশন। ফোন বাজছে/কাঁপছে মানে সব ঠিক আছে।"
             )
         }
-        if (intent?.getBooleanExtra(EXTRA_AITEST, false) == true) {
-            runAiCheck()
-        }
-        if (intent?.getBooleanExtra(EXTRA_VOICETEST, false) == true) {
-            runVoiceCheck()
-        }
-        if (intent?.getBooleanExtra(EXTRA_CLOUDTEST, false) == true) {
-            runCloudCheck()
-        }
-        if (intent?.getBooleanExtra(EXTRA_NAVTEST, false) == true) {
+        if (intent.getBooleanExtra(EXTRA_AITEST, false)) runAiCheck()
+        if (intent.getBooleanExtra(EXTRA_MOODTEST, false)) runMoodCheck()
+        if (intent.getBooleanExtra(EXTRA_VOICETEST, false)) runVoiceCheck()
+        if (intent.getBooleanExtra(EXTRA_CLOUDTEST, false)) runCloudCheck()
+        if (intent.getBooleanExtra(EXTRA_NAVTEST, false)) {
             // After layout: switching sections drives the pager and the nav bar, and
             // both need real views to talk to.
             b.root.post { runNavCheck() }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleTestExtras(intent)
     }
 
     /**
@@ -154,6 +174,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Headless check of the mood/gatekeeper path, which builds its own prompt and
+     * parses a different JSON shape from the normal reply path — an ordinary AI test
+     * passing says nothing about it.
+     */
+    private fun runMoodCheck() {
+        val p = Prefs.get(this)
+        LogStore.add(this, "মুড পরীক্ষা শুরু — moodEnabled=${p.moodEnabled} · ${p.model}")
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            val result = try {
+                ReplyEngine.moodSelfTest(this@MainActivity)
+            } catch (e: Exception) {
+                "✗ মুড পরীক্ষা ব্যর্থ: ${e.message}"
+            }
+            LogStore.add(this@MainActivity, result)
+        }
+    }
+
     /** Headless API check that writes its result to the in-app log. */
     private fun runAiCheck() {
         val p = Prefs.get(this)
@@ -180,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_VOICETEST = "voicetest"
         const val EXTRA_CLOUDTEST = "cloudtest"
         const val EXTRA_NAVTEST = "navtest"
+        const val EXTRA_MOODTEST = "moodtest"
 
         /** Bottom-navigation menu id for each section, indexed by section. */
         val SECTION_MENU_ID = intArrayOf(
