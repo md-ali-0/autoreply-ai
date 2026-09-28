@@ -40,6 +40,10 @@ class MainActivity : AppCompatActivity() {
 
         setupWindow()
         setupNavigation()
+        // Strip retired AI providers (currently apinex.bond) from storage on every
+        // launch, so an already-installed device is cleaned without the user having
+        // to open the AI settings screen and delete the entry by hand.
+        AiProviderStore.purgeBlocked(this)
         // Must be set BEFORE bindHero() attaches the listener, otherwise restoring
         // the saved state would fire it and start/stop the service spuriously.
         b.switchEnabled.isChecked = p.enabled
