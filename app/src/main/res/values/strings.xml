@@ -58,6 +58,8 @@
     <string name="delay_max">বেশি</string>
     <string name="delay_helper">এই রেঞ্জ থেকে র‍্যান্ডম সময় নেবে — যাতে যন্ত্রের মতো না লাগে। খোঁজখবর আর "হুম"-এর উত্তরে ১–২ সেকেন্ড।</string>
     <string name="cooldown">কুলডাউন (সেকেন্ড)</string>
+    <string name="reply_max_chars">উত্তরের সর্বোচ্চ দৈর্ঘ্য (অক্ষর)</string>
+    <string name="reply_max_chars_hint">এর চেয়ে লম্বা হলে বাক্যের শেষে কেটে দেওয়া হবে। লোকে ছোট মেসেজ লেখে — ৬০-৯০ ভালো।</string>
     <string name="signature">রিপ্লাইয়ের শেষে যুক্ত করুন (ঐচ্ছিক)</string>
     <string name="signature_hint">(কাজে আছি)</string>
 

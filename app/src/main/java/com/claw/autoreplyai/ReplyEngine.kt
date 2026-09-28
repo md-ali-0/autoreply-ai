@@ -248,7 +248,7 @@ object ReplyEngine {
             ReplyDecision.Action.REPLY -> Unit
         }
 
-        val reply = decision.reply
+        val reply = fitReply(decision.reply, p.replyMaxChars)
         if (reply.isBlank()) {
             log(app, "উত্তর খালি এলো — $sender")
             return
@@ -300,8 +300,27 @@ object ReplyEngine {
         return Incoming(transcript, fromVoice = true)
     }
 
-    private fun digest(
-        app: Context,
+    /**
+     * Hard ceiling on a reply. The prompt asks for short messages, but a model that
+     * ignores it produces the customer-service paragraphs that made the bot obvious,
+     * so trim at a sentence boundary rather than sending a wall of text.
+     */
+    private fun fitReply(text: String, max: Int): String {
+        val t = text.trim()
+        if (max <= 0 || t.length <= max) return t
+
+        val window = t.take(max + 1)
+        // Prefer a sentence end, then a word break, then the raw cut.
+        val sentence = window.lastIndexOfAny(charArrayOf('।', '.', '!', '?', '\n'))
+        if (sentence >= max / 2) return window.take(sentence + 1).trim()
+
+        val space = window.lastIndexOf(' ')
+        if (space >= max / 2) return window.take(space).trim()
+
+        return window.take(max).trim()
+    }
+
+    private fun digest(        app: Context,
         pkg: String,
         sender: String,
         message: String,
@@ -368,7 +387,7 @@ object ReplyEngine {
             Alarm.trigger(app, "$sender: ${gd.reply.take(80)}")
         }
 
-        val reply = gd.reply
+        val reply = fitReply(gd.reply, p.replyMaxChars)
         if (reply.isBlank()) {
             log(app, "gatekeeper উত্তর খালি — $sender")
             return
@@ -615,6 +634,8 @@ object ReplyEngine {
             sb.append('\n').append(LANGUAGE_RULE).append('\n')
         }
 
+        sb.append('\n').append(SHORT_RULE).append('\n')
+
         if (fromVoice) {
             sb.append('\n').append(VOICE_NOTE_RULE).append('\n')
         }
@@ -674,6 +695,20 @@ object ReplyEngine {
         • কন্টাক্ট: "খেয়েছেন?"            → "হ্যাঁ, খেয়েছি। আপনি খেয়েছেন?"
         • কন্টাক্ট: "তুমি কেমন আছো?"      → "ভালো আছি, তুমি কেমন আছো?"
         • কন্টাক্ট: "তুই কেমন আছিস?"      → "ভালো আছি, তুই কেমন আছিস?"
+    """.trimIndent()
+
+    /**
+     * Real people text in fragments, not paragraphs. A model left to itself writes
+     * polite full sentences, which reads like a customer-service bot.
+     */
+    private val SHORT_RULE = """
+        মেসেজের দৈর্ঘ্য (খুব গুরুত্বপূর্ণ):
+        - বেশিরভাগ উত্তর ১-২ ছোট বাক্য, মোট ৬০ অক্ষরের কম
+        - বন্ধুর সাথে চ্যাটে লোকে লম্বা প্যারাগ্রাফ লেখে না — ছোট টুকরো লেখে
+        - এক বাক্যে যা বলা যায়, তিন বাক্যে বলবে না
+        - কাউকে অভিবাদন জানাতে বা হালকা কিছু বলতে ২-৫ শব্দই যথেষ্ট
+        - প্রশ্ন করলে শুধু উত্তর দাও, তার সাথে অতিরিক্ত ব্যাখ্যা বা সান্ত্বনা যোগ করো না
+        - সত্যিই অনেক কিছু বলার থাকলে তবেই লম্বা হবে — কারণ থাকতে হবে
     """.trimIndent()
 
     /**
@@ -748,6 +783,7 @@ object ReplyEngine {
         if (p.mirrorRegister) {
             sb.append(REGISTER_RULE).append("\n\n")
         }
+        sb.append(SHORT_RULE).append("\n\n")
         if (p.autoLanguage) {
             sb.append(LANGUAGE_RULE).append("\n\n")
         }
@@ -771,13 +807,14 @@ object ReplyEngine {
           সাধারণ খোঁজখবর, ফ্লার্ট, খুনসুটি জরুরি নয়।
 
         reply লেখার নিয়ম:
-        1. কেউ সালাম দিলে (আসসালামু আলাইকুম, সালাম, হাই, হ্যালো) → সালামের উত্তর দাও।
-           উদাহরণ: "ওয়ালাইকুম আসসালাম", "ওয়ালাইকুম সালাম, কেমন আছেন?"
-        2. সাধারণ কথা (কেমন আছো, কি করছো, খেয়েছো, কোথায় আছো) → "কেমন আছেন?" বা সাদৃশ্য জিজ্ঞাসা করো।
-           উদাহরণ: "আমি ঠিক আছি, আপনি কেমন আছেন?", "আমি এখানেই আছি, আপনি কেমন আছেন?"
-        3. অন্য কিছু বা প্রশ্ন → "আমি [তোমার নাম], Ali এখন [activity] করছে। জরুরি কিছু হলে বলুন, আমি ডেকে দিচ্ছি।"
-        4. কেউ "আপনি কে" জিজ্ঞেস করলে → "আমি [তোমার নাম], Ali-র assistant। জরুরি কিছু হলে বলুন, আমি ডেকে দিচ্ছি।"
-        5. কেউ জরুরি সাহায্য চাইলে → "জরুরি মনে হচ্ছে, আমি Ali-কে ডেকে দিচ্ছি। একটু অপেক্ষা করুন।"
+        - প্রতি উত্তরে সর্বোচ্চ ১-২ ছোট বাক্য, ৬০ অক্ষরের কম। লম্বা প্যারাগ্রাফ নয়।
+        - একই বাক্য বারবার হুবহু লিখবে না — একই অর্থে প্রতিবার ভিন্ন শব্দ ব্যবহার করো।
+
+        1. সালাম (আসসালামু আলাইকুম, সালাম, হাই, হ্যালো) → "ওয়ালাইকুম আসসালাম"
+        2. খোঁজখবর (কেমন আছো, কি করছো, খেয়েছো, কোথায় আছো) → "ভালো আছি, আপনি?"
+        3. অন্য কিছু বা প্রশ্ন → "আমি [তোমার নাম], Ali-র assistant। Ali এখন [activity]। জরুরি হলে বলুন।"
+        4. কেউ "আপনি কে" জিজ্ঞেস করলে → "আমি [তোমার নাম], Ali-র assistant।"
+        5. কেউ জরুরি সাহায্য চাইলে → "জরুরি মনে হচ্ছে, Ali-কে ডেকে দিচ্ছি।"
         6. ছোট, সরাসরি লেখো — বাংলায় স্বাভাবিক ভাষায়
         7. কোনো ব্যক্তিগত তথ্য শেয়ার করবে না
     """.trimIndent()

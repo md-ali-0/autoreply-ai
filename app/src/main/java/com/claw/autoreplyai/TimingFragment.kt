@@ -33,6 +33,7 @@ class TimingFragment : BaseSettingsFragment() {
         b.etDelayMin.setText(prefs.delayMinSec.toString())
         b.etDelayMax.setText(prefs.delayMaxSec.toString())
         b.etCooldown.setText(prefs.cooldownSec.toString())
+        b.etMaxChars.setText(prefs.replyMaxChars.toString())
         b.etSignature.setText(prefs.signature)
     }
 
@@ -45,6 +46,7 @@ class TimingFragment : BaseSettingsFragment() {
         prefs.delayMinSec = b.etDelayMin.text?.toString()?.toIntOrNull() ?: 3
         prefs.delayMaxSec = b.etDelayMax.text?.toString()?.toIntOrNull() ?: 5
         prefs.cooldownSec = b.etCooldown.text?.toString()?.toIntOrNull() ?: 60
+        prefs.replyMaxChars = b.etMaxChars.text?.toString()?.toIntOrNull() ?: 90
         prefs.signature = b.etSignature.text?.toString().orEmpty()
     }
 

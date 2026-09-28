@@ -240,6 +240,15 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getString("signature", "") ?: ""
         set(v) = sp.edit().putString("signature", v).apply()
 
+    /**
+     * Hard ceiling on a reply, in characters. The prompt already asks for short
+     * messages; this is the safety net for when the model ignores it, which is
+     * what produced 100-character bot-sounding paragraphs.
+     */
+    var replyMaxChars: Int
+        get() = sp.getInt("replyMaxChars", 90)
+        set(v) = sp.edit().putInt("replyMaxChars", v.coerceIn(20, 500)).apply()
+
     // ---------- per-contact cooldown bookkeeping ----------
     fun lastReply(contact: String): Long = sp.getLong("last_" + contact.lowercase(), 0L)
 
