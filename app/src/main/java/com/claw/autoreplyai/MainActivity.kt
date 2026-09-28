@@ -44,6 +44,8 @@ class MainActivity : AppCompatActivity() {
         // Headless self tests, so they can be run while the phone is locked:
         //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez selftest true
         //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez notiftest true
+        //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez aitest true
+        //   adb shell am start -n com.claw.autoreplyai/.MainActivity --ez voicetest true
         if (intent?.getBooleanExtra(EXTRA_SELFTEST, false) == true) {
             ReplySelfTest.run(this)
         }
@@ -56,6 +58,9 @@ class MainActivity : AppCompatActivity() {
         }
         if (intent?.getBooleanExtra(EXTRA_AITEST, false) == true) {
             runAiCheck()
+        }
+        if (intent?.getBooleanExtra(EXTRA_VOICETEST, false) == true) {
+            VoiceTranscriber.diagnose(this)
         }
     }
 
@@ -82,6 +87,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_SELFTEST = "selftest"
         const val EXTRA_NOTIFTEST = "notiftest"
         const val EXTRA_AITEST = "aitest"
+        const val EXTRA_VOICETEST = "voicetest"
     }
 
     override fun onResume() {

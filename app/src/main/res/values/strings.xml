@@ -131,14 +131,14 @@
 
     <!-- ===== voice / language / approval ===== -->
     <string name="voice_transcribe">ভয়েস মেসেজ পড়ে উত্তর দেবে</string>
-    <string name="voice_transcribe_sub">ভয়েস মেসেজ এলে টেক্সট বানিয়ে AI উত্তর দেবে। এখন শুধু WhatsApp-এর ভয়েস নোট পড়া যায়।</string>
+    <string name="voice_transcribe_sub">ভয়েস মেসেজ এলে টেক্সট বানিয়ে AI উত্তর দেবে। এখন শুধু WhatsApp-এর ভয়েস নোট পড়া যায়, আর তার জন্য অনুমতি ট্যাবে "সব ফাইল পড়ার অনুমতি" চালু থাকতে হবে।</string>
     <string name="voice_model">ট্রান্সক্রিপশন মডেল</string>
     <string name="voice_model_hint">OpenAI-compatible /audio/transcriptions — যেমন whisper-1</string>
     <string name="auto_language">কন্টাক্টের ভাষায় উত্তর</string>
     <string name="auto_language_sub">ইংরেজিতে লিখলে ইংরেজিতে, বাংলায় লিখলে বাংলায়। বন্ধ থাকলে সবসময় বাংলায়।</string>
     <string name="approval_mode">পাঠানোর আগে অনুমোদন নেবে</string>
     <string name="approval_mode_sub">AI নিজে পাঠাবে না — নোটিফিকেশনে খসড়া দেখাবে, আপনি "পাঠাও" চাপলে যাবে।</string>
-    <string name="audio_perm">ভয়েস মেসেজ পড়ার অনুমতি</string>
+    <string name="audio_perm">সব ফাইল পড়ার অনুমতি (ভয়েস মেসেজের জন্য)</string>
 
     <!-- ===== digest ===== -->
     <string name="digest_button">কী মিস করলাম?</string>

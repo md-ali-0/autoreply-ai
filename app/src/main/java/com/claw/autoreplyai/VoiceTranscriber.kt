@@ -69,6 +69,28 @@ object VoiceTranscriber {
         return false
     }
 
+    /**
+     * True when the app can actually reach the voice-note files.
+     *
+     * `READ_MEDIA_AUDIO` is NOT enough on Android 11+: it grants MediaStore access,
+     * and WhatsApp's voice notes are invisible to MediaStore because their folder
+     * carries a `.nomedia` file. Reaching them means reading another app's
+     * `Android/media` directory directly, which needs "All files access"
+     * ([Environment.isExternalStorageManager]).
+     */
+    fun hasVoiceAccess(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return try {
+                Environment.isExternalStorageManager()
+            } catch (e: Exception) {
+                false
+            }
+        }
+        val perm = Manifest.permission.READ_EXTERNAL_STORAGE
+        return ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /** Kept for older devices, where plain storage permission is what matters. */
     fun hasAudioPermission(ctx: Context): Boolean {
         val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_AUDIO
@@ -76,6 +98,46 @@ object VoiceTranscriber {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
         return ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * Explains, in the app log, exactly which step of voice-note discovery is
+     * failing. Called from the Logs tab's পরীক্ষা button — a silent skip is
+     * impossible to debug from the outside.
+     */
+    fun diagnose(ctx: Context) {
+        val access = hasVoiceAccess(ctx)
+        val audio = hasAudioPermission(ctx)
+        LogStore.add(
+            ctx,
+            "ভয়েস ডায়াগনোসিস: সব-ফাইল অনুমতি=${if (access) "আছে ✓" else "নেই ✗"}, " +
+                    "অডিও অনুমতি=${if (audio) "আছে" else "নেই"}, SDK=${Build.VERSION.SDK_INT}"
+        )
+
+        val roots = voiceNoteRoots()
+        if (roots.isEmpty()) {
+            LogStore.add(ctx, "ভয়েস ডায়াগনোসিস: WhatsApp ভয়েস ফোল্ডার খুঁজেই পাওয়া যায়নি")
+            return
+        }
+        for (root in roots) {
+            val children = try {
+                root.listFiles()
+            } catch (e: Exception) {
+                LogStore.add(ctx, "ভয়েস ডায়াগনোসিস: ${root.path} — ত্রুটি: ${e.message}")
+                null
+            }
+            if (children == null) {
+                LogStore.add(ctx, "ভয়েস ডায়াগনোসিস: ${root.path} — পড়া যায়নি (অনুমতি দিন)")
+                continue
+            }
+            val newest = newestUnder(root)
+            LogStore.add(
+                ctx,
+                "ভয়েস ডায়াগনোসিস: ${root.path} — ${children.size} আইটেম, " +
+                        "নতুন ফাইল=${newest?.name ?: "নেই"}" +
+                        (newest?.let { ", ${(System.currentTimeMillis() - it.lastModified()) / 1000}সেক আগে" } ?: "")
+            )
+        }
     }
 
     // ------------------------------------------------------------ transcribe
@@ -89,13 +151,16 @@ object VoiceTranscriber {
             LogStore.add(ctx, "ভয়েস ট্রান্সক্রিপশন: ${MessagingApps.label(pkg)}-এর অডিও পড়া যায় না")
             return null
         }
-        if (!hasAudioPermission(ctx)) {
-            LogStore.add(ctx, "ভয়েস ট্রান্সক্রিপশন: অডিও পড়ার অনুমতি নেই")
+        if (!hasVoiceAccess(ctx)) {
+            LogStore.add(
+                ctx,
+                "ভয়েস ট্রান্সক্রিপশন: 'সব ফাইল পড়ার অনুমতি' নেই — অনুমতি ট্যাব থেকে চালু করুন"
+            )
             return null
         }
 
         val file = newestVoiceNote() ?: run {
-            LogStore.add(ctx, "ভয়েস ট্রান্সক্রিপশন: নতুন ভয়েস ফাইল পাওয়া যায়নি")
+            LogStore.add(ctx, "ভয়েস ট্রান্সক্রিপশন: নতুন ভয়েস ফাইল পাওয়া যায়নি (পরীক্ষা বোতাম চাপুন)")
             return null
         }
 
@@ -155,23 +220,33 @@ object VoiceTranscriber {
 
     /** The most recently written voice note, if one landed in the last [FRESH_MS]. */
     private fun newestVoiceNote(): File? {
-        val roots = voiceNoteRoots()
         var newest: File? = null
         var newestAt = 0L
-
-        for (root in roots) {
-            walk(root, 0) { f ->
-                val at = f.lastModified()
-                if (at > newestAt) {
-                    newestAt = at
-                    newest = f
-                }
+        for (root in voiceNoteRoots()) {
+            val hit = newestUnder(root) ?: continue
+            val at = hit.lastModified()
+            if (at > newestAt) {
+                newestAt = at
+                newest = hit
             }
         }
-
         val hit = newest ?: return null
         val age = System.currentTimeMillis() - newestAt
         return if (age in 0..FRESH_MS) hit else null
+    }
+
+    /** Newest audio file anywhere under [root], or null when it cannot be read. */
+    private fun newestUnder(root: File): File? {
+        var newest: File? = null
+        var newestAt = 0L
+        walk(root, 0) { f ->
+            val at = f.lastModified()
+            if (at > newestAt) {
+                newestAt = at
+                newest = f
+            }
+        }
+        return newest
     }
 
     private fun voiceNoteRoots(): List<File> {

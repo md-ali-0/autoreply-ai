@@ -47,7 +47,7 @@ class PermissionsFragment : BaseSettingsFragment() {
         b.rowContacts.setOnClickListener { askContacts() }
         b.rowBattery.setOnClickListener { requestBatteryExemption() }
         b.rowOverlay.setOnClickListener { requestOverlay() }
-        b.rowAudio.setOnClickListener { askAudio() }
+        b.rowAudio.setOnClickListener { askVoiceAccess() }
 
         // These persist immediately on toggle — this tab has no Save button of its
         // own, and the choice must stick even if Save is never pressed.
@@ -115,7 +115,7 @@ class PermissionsFragment : BaseSettingsFragment() {
         val contacts = ContactResolver.hasPermission(requireContext())
         val battery = isIgnoringBattery()
         val overlay = Settings.canDrawOverlays(requireContext())
-        val audio = VoiceTranscriber.hasAudioPermission(requireContext())
+        val audio = VoiceTranscriber.hasVoiceAccess(requireContext())
 
         setState(b.tvNotifState, b.dotNotif, notif)
         setState(b.tvAccState, b.dotAcc, acc)
@@ -208,10 +208,12 @@ class PermissionsFragment : BaseSettingsFragment() {
             != PackageManager.PERMISSION_GRANTED
         ) wanted.add(Manifest.permission.READ_CONTACTS)
 
-        audioPermission()?.let { perm ->
-            if (ContextCompat.checkSelfPermission(ctx, perm) != PackageManager.PERMISSION_GRANTED) {
-                wanted.add(perm)
-            }
+        // On Android 11+ the audio runtime permission is useless here — the row's
+        // own tap handler opens the "All files access" screen instead.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) wanted.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -230,19 +232,34 @@ class PermissionsFragment : BaseSettingsFragment() {
         permLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
     }
 
-    private fun askAudio() {
-        val perm = audioPermission()
-        if (perm == null || VoiceTranscriber.hasAudioPermission(requireContext())) {
+    /**
+     * Voice notes live in another app's media folder, so Android 11+ needs the
+     * "All files access" special permission — it can only be granted from Settings,
+     * not through a permission dialog.
+     */
+    private fun askVoiceAccess() {
+        if (VoiceTranscriber.hasVoiceAccess(requireContext())) {
             toast(getString(R.string.granted))
             return
         }
-        permLauncher.launch(arrayOf(perm))
-    }
-
-    /** Android 13 split audio out of storage into its own permission. */
-    private fun audioPermission(): String? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_AUDIO
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            permLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
+            return
+        }
+        val pkg = requireContext().packageName
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:$pkg")
+                )
+            )
+        } catch (e: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            } catch (e2: Exception) {
+                toast("সেটিংস খোলা যায়নি")
+            }
+        }
     }
 }
