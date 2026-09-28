@@ -226,10 +226,11 @@ object ReplyEngine {
 
         val messages = ArrayList<AiClient.Msg>()
         val contactContext = ContactContext.forContact(app, sender)
+        val close = ContactContext.isClose(app, sender)
         messages.add(
             AiClient.Msg(
                 "system",
-                buildSystemPrompt(p, sender, contactContext, incoming.fromVoice, fromPhoto)
+                buildSystemPrompt(p, sender, contactContext, incoming.fromVoice, fromPhoto, close)
             )
         )
         messages.addAll(trimmedHistory(app, sender))
@@ -683,7 +684,8 @@ object ReplyEngine {
         sender: String,
         contactContext: String,
         fromVoice: Boolean = false,
-        fromPhoto: Boolean = false
+        fromPhoto: Boolean = false,
+        closeContact: Boolean = false
     ): String {
         val sb = StringBuilder()
         sb.append(p.persona.trim()).append("\n\n")
@@ -737,6 +739,11 @@ object ReplyEngine {
         // assistant that declares love or promises a phone call on the owner's
         // behalf does real damage, and this must not be lost by editing a text box.
         sb.append('\n').append(COMMITMENT_RULE).append('\n')
+
+        // Warmth is per-contact. Assuming closeness is far worse than assuming none.
+        sb.append('\n')
+            .append(if (closeContact) CLOSE_CONTACT_RULE else NO_AFFECTION_RULE)
+            .append('\n')
 
         if (fromVoice) {
             sb.append('\n').append(VOICE_NOTE_RULE).append('\n')
@@ -807,37 +814,58 @@ object ReplyEngine {
     """.trimIndent()
 
     /**
-     * The hard limits on speaking for Ali.
+     * The hard limits on speaking for Ali. Always on, whatever the contact.
      *
-     * Written after a real incident: an unsaved number asked "তুমি আমাকে কত ভালবাস?"
-     * and the bot answered "অনেক। বাসায় গিয়ে কল দিচ্ছি, তখন কথা হবে।" — declaring
-     * love and promising a phone call that Ali never agreed to make. A chat model
-     * has no idea which of those it is allowed to say, so it is told flatly.
+     * These are about *actions* — a promise is something Ali then has to do, and a
+     * made-up fact is a lie. Neither becomes acceptable because the contact is close.
      */
     private val COMMITMENT_RULE = """
         ⛔ কখনো যা করা যাবে না (এর কোনো ব্যতিক্রম নেই):
 
-        ১. নিজের পক্ষ থেকে ভালোবাসা বা প্রেম প্রকাশ করবে না।
-           "ভালোবাসি", "অনেক ভালোবাসি", "তোমাকে ছাড়া পারি না", "তুমিই আমার সব" —
-           এ ধরনের একটি কথাও বলবে না, এমনকি কেউ জিজ্ঞেস করলেও।
-           কেউ "আমাকে কত ভালবাসো?" জাতীয় কিছু জিজ্ঞেস করলে উত্তর দেবে না —
-           ছোট করে বলবে: "এটা আমার নিজে বলা উচিত।" আর Ali-কে জানাবে।
-
-        ২. কোনো প্রতিশ্রুতি দেবে না। ফোন করা, বাসায় যাওয়া, দেখা করা, ঘুরতে যাওয়া,
+        ১. কোনো প্রতিশ্রুতি দেবে না। ফোন করা, বাসায় যাওয়া, দেখা করা, ঘুরতে যাওয়া,
            টাকা বা কোনো কিছু দেওয়া — কিছুই করার কথা দেবে না।
 
-        ৩. কোনো সময়, তারিখ বা স্থান মেনে নেবে না। ("আজ রাতে আসবো", "কাল দেখা হবে",
+        ২. কোনো সময়, তারিখ বা স্থান মেনে নেবে না। ("আজ রাতে আসবো", "কাল দেখা হবে",
            "এখন বের হচ্ছি" — এগুলো কখনো নয়।)
 
-        ৪. সম্পর্ক, বিয়ে বা ভবিষ্যৎ নিয়ে কোনো কথা দেবে না।
+        ৩. বিয়ে বা ভবিষ্যৎ নিয়ে কোনো কথা দেবে না।
 
-        ৫. কারো সম্পর্কে এমন কিছু বলবে না যা তুমি জানো না। অনুমান করে কোনো
-           ঘটনা, সিদ্ধান্ত বা মত তৈরি করবে না।
+        ৪. কারো সম্পর্কে এমন কিছু বলবে না যা তুমি জানো না। অনুমান করে কোনো
+           ঘটনা, সিদ্ধান্ত বা মত তৈরি করবে না। মিথ্যা বলবে না, বাড়িয়ে বলবে না।
 
-        কেউ এসব চাইলে বা জিজ্ঞেস করলে কী করবে:
-        - ছোট, ভদ্র, অস্পষ্ট উত্তর দাও — যেমন "এটা আমার নিজে বলা উচিত, পরে বলবো।"
-        - কোনো কারণ বানিয়ে বলবে না, মিথ্যা বলবে না, বাড়িয়ে বলবে না
-        - সাথে সাথে Ali-কে জানাও, যাতে সে নিজে উত্তর দিতে পারে
+        কেউ এসব চাইলে ছোট করে বলবে: "এটা আমার নিজে বলা উচিত, পরে বলবো।"
+        আর সাথে সাথে Ali-কে জানাবে, যাতে সে নিজে উত্তর দিতে পারে।
+    """.trimIndent()
+
+    /**
+     * For contacts the owner has NOT marked as close. Declaring love on someone's
+     * behalf is the single most damaging thing this app has done — it happened to an
+     * unsaved number, so the default is a flat refusal.
+     */
+    private val NO_AFFECTION_RULE = """
+        ⛔ ভালোবাসা বা প্রেম: এই কন্টাক্টের সাথে Ali-র সম্পর্ক কেমন, তা তুমি জানো না।
+        তাই নিজের পক্ষ থেকে ভালোবাসা বা প্রেম প্রকাশ করবে না — "ভালোবাসি",
+        "অনেক ভালোবাসি", "তোমাকে ছাড়া পারি না" — একটি কথাও নয়, কেউ জিজ্ঞেস করলেও।
+
+        কেউ "আমাকে কত ভালবাসো?" জাতীয় কিছু জিজ্ঞেস করলে উত্তর দেবে না —
+        ছোট করে বলবে: "এটা আমার নিজে বলা উচিত।" আর Ali-কে জানাবে।
+    """.trimIndent()
+
+    /**
+     * For contacts the owner has explicitly marked as close. Warmth is allowed here,
+     * because refusing it would be just as wrong in the other direction — but only
+     * what is actually true, and still no promises.
+     */
+    private val CLOSE_CONTACT_RULE = """
+        💛 এই কন্টাক্ট Ali-র খুব কাছের — তাই আন্তরিক, উষ্ণ, মায়াময় কথা বলতে পারবে।
+        "ভালোবাসি", "মিস করছি", "তোমার কথা ভাবছি" — এসব স্বাভাবিক এবং ঠিক আছে।
+
+        তবে শর্ত:
+        - যা বলবে তা যেন সত্যি হয়। বাড়িয়ে বলবে না, মুখ দেখে বলবে না।
+        - "তোমাকে ছাড়া বাঁচবো না" জাতীয় অতিরঞ্জিত কথা বলবে না।
+        - প্রতিশ্রুতি এখনো নিষিদ্ধ — ফোন, দেখা, যাওয়া, কোনো কিছু করার কথা দেবে না।
+        - কন্টাক্ট কষ্টে থাকলে, সম্পর্ক নিয়ে টানাপোড়েন থাকলে, বা বড় কোনো
+          সিদ্ধান্তের কথা উঠলে — উত্তর দেবে না, Ali-কে জানাবে।
     """.trimIndent()
 
     /**

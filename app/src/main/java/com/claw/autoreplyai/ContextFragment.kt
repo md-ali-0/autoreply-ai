@@ -9,6 +9,7 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import com.claw.autoreplyai.databinding.FragmentContextBinding
 import com.claw.autoreplyai.databinding.ItemContextRowBinding
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 
 /**
@@ -28,7 +29,8 @@ class ContextFragment : BaseSettingsFragment() {
         val root: View,
         val name: TextInputEditText,
         val body: TextInputEditText,
-        val memInfo: TextView
+        val memInfo: TextView,
+        val close: MaterialSwitch
     )
 
     private val rows = mutableListOf<Row>()
@@ -51,7 +53,7 @@ class ContextFragment : BaseSettingsFragment() {
     }
 
     override fun onViewsReady() {
-        b.btnAddRow.setOnClickListener { addRow("", "") }
+        b.btnAddRow.setOnClickListener { addRow("", "", false) }
 
         b.btnExport.setOnClickListener {
             save() // capture whatever is on screen before snapshotting
@@ -72,9 +74,9 @@ class ContextFragment : BaseSettingsFragment() {
 
         val entries = ContactContext.all(requireContext())
         if (entries.isEmpty()) {
-            addRow("", "")
+            addRow("", "", false)
         } else {
-            entries.forEach { addRow(it.name, it.context) }
+            entries.forEach { addRow(it.name, it.context, it.close) }
         }
     }
 
@@ -93,7 +95,8 @@ class ContextFragment : BaseSettingsFragment() {
             rows.map {
                 ContactContext.Entry(
                     it.name.text?.toString().orEmpty().trim(),
-                    it.body.text?.toString().orEmpty().trim()
+                    it.body.text?.toString().orEmpty().trim(),
+                    it.close.isChecked
                 )
             }
         )
@@ -101,18 +104,19 @@ class ContextFragment : BaseSettingsFragment() {
 
     // ------------------------------------------------------------------ rows
 
-    private fun addRow(name: String, context: String) {
+    private fun addRow(name: String, context: String, close: Boolean) {
         val row = ItemContextRowBinding.inflate(layoutInflater, b.ctxContainer, false)
         row.etCtxName.setText(name)
         row.etCtxBody.setText(context)
+        row.switchCtxClose.isChecked = close
 
-        val entry = Row(row.root, row.etCtxName, row.etCtxBody, row.tvMemInfo)
+        val entry = Row(row.root, row.etCtxName, row.etCtxBody, row.tvMemInfo, row.switchCtxClose)
         updateMemory(entry)
 
         row.btnRemoveRow.setOnClickListener {
             b.ctxContainer.removeView(entry.root)
             rows.remove(entry)
-            if (rows.isEmpty()) addRow("", "")
+            if (rows.isEmpty()) addRow("", "", false)
         }
 
         row.btnClearMem.setOnClickListener {
