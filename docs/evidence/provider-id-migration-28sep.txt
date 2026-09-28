@@ -1,0 +1,202 @@
+[28 Sep 19:26:11] API ব্যর্থ (টানা 14 বার): Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:26:11] API ব্যর্থ — SeedTest: Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:26:07] API ব্যর্থ (টানা 13 বার): Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:26:07] API ব্যর্থ — SeedTest: Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:26:07] আগের রিপ্লাই চলছে — Hayati ❤️ (এই মেসেজটা পরে উত্তর দেওয়া হবে)
+[28 Sep 19:26:05] প্রোভাইডার ডায়াগনোসিস: ব্লকড 0 টা বাদ যাবে
+[28 Sep 19:26:05]   #1 SeedTest · https://seed.test/v1 · id=5d6117f2 · key=19 অক্ষর, SEED… · selected=true
+[28 Sep 19:26:05] প্রোভাইডার ডায়াগনোসিস: প্রোফাইল 1 টা
+[28 Sep 19:26:05] প্রোভাইডার ডায়াগনোসিস: সিক্রেট নাম 1 টা — providerApiKey_5d6117f2-3947-4776-a79e-00f031ba1a9d
+[28 Sep 19:26:01] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 19:26:01] পরীক্ষা: Instagram নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:26:01] পরীক্ষা: WhatsApp নোটিফিকেশন — actions=3, সরাসরি reply আছে ✓
+[28 Sep 19:26:01] পরীক্ষা: WhatsApp নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:26:01] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:25:51] লগ ডাম্প: /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (30126 বাইট)
+[28 Sep 19:25:47] API ব্যর্থ (টানা 12 বার): Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:25:47] API ব্যর্থ — SeedTest: Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:25:45] প্রোভাইডার ডায়াগনোসিস: ব্লকড 0 টা বাদ যাবে
+[28 Sep 19:25:45]   #1 SeedTest · https://seed.test/v1 · id=5d6117f2 · key=19 অক্ষর, SEED… · selected=true
+[28 Sep 19:25:45] প্রোভাইডার ডায়াগনোসিস: প্রোফাইল 1 টা
+[28 Sep 19:25:45] প্রোভাইডার ডায়াগনোসিস: সিক্রেট নাম 1 টা — providerApiKey_5d6117f2-3947-4776-a79e-00f031ba1a9d
+[28 Sep 19:25:43] API ব্যর্থ (টানা 11 বার): Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:25:43] API ব্যর্থ — SeedTest: Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:25:43] আগের রিপ্লাই চলছে — Hayati ❤️ (এই মেসেজটা পরে উত্তর দেওয়া হবে)
+[28 Sep 19:25:41] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 19:25:41] পরীক্ষা: Instagram নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:25:41] পরীক্ষা: WhatsApp নোটিফিকেশন — actions=3, সরাসরি reply আছে ✓
+[28 Sep 19:25:41] পরীক্ষা: WhatsApp নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:25:41] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:25:32] লগ ডাম্প: /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (29817 বাইট)
+[28 Sep 19:25:28] API ব্যর্থ (টানা 10 বার): Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:25:28] API ব্যর্থ — SeedTest: Unable to resolve host "seed.test": No address associated with hostname
+[28 Sep 19:25:25] প্রোভাইডার ডায়াগনোসিস: ব্লকড 0 টা বাদ যাবে
+[28 Sep 19:25:25]   #1 SeedTest · https://seed.test/v1 · id=5d6117f2 · key=19 অক্ষর, SEED… · selected=true
+[28 Sep 19:25:25] প্রোভাইডার ডায়াগনোসিস: প্রোফাইল 1 টা
+[28 Sep 19:25:25] প্রোভাইডার ডায়াগনোসিস: সিক্রেট নাম 1 টা — providerApiKey_5d6117f2-3947-4776-a79e-00f031ba1a9d
+[28 Sep 19:25:25] প্রোভাইডার key সুরক্ষিত স্টোরেজে সরানো হলো (id-তে 1 টা, প্লেইনটেক্সট মুছে 0 টা)
+[28 Sep 19:25:25] প্রোভাইডার পরিচয় বসানো হলো (1 টা)
+[28 Sep 19:25:20] পরীক্ষা: চ্যাট নোটিফিকেশন 1 টার মধ্যে 0 টায় সরাসরি reply আছে
+[28 Sep 19:25:20] পরীক্ষা: Instagram নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:25:20] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:25:12] লগ ডাম্প: /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (29894 বাইট)
+[28 Sep 19:25:05] সিড: পুরোনো slot-নামে key বসানো হলো, প্রোফাইলে id নেই
+[28 Sep 19:25:02] পরীক্ষা: চ্যাট নোটিফিকেশন 1 টার মধ্যে 0 টায় সরাসরি reply আছে
+[28 Sep 19:25:02] পরীক্ষা: Instagram নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:25:02] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:24:54] পরীক্ষা: চ্যাট নোটিফিকেশন 1 টার মধ্যে 0 টায় সরাসরি reply আছে
+[28 Sep 19:24:54] পরীক্ষা: Instagram নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:24:54] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:21:40] API ব্যর্থ (টানা 9 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:21:40] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:21:36] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 19:20:46] API ব্যর্থ (টানা 8 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:20:46] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:20:44] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 19:17:27] ডুপ্লিকেট মেসেজ বাদ — Chat heads active
+[28 Sep 19:17:27]   ↑ আরও 3টি একই ডুপ্লিকেট চাপা পড়েছে
+[28 Sep 19:17:23] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 19:10:33] কল ক্যাটেগরির নোটিফিকেশন বাদ — محمد عكاش صاحب
+[28 Sep 19:10:32] কল ক্যাটেগরির নোটিফিকেশন বাদ — محمد عكاش صاحب
+[28 Sep 19:10:31] ডুপ্লিকেট মেসেজ বাদ — Chat heads active
+[28 Sep 19:10:31] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 19:10:30] ডুপ্লিকেট মেসেজ বাদ — محمد عكاش صاحب
+[28 Sep 19:10:30] কল ইভেন্ট বাদ — محمد عكاش صاحب: Audio call
+[28 Sep 19:10:30] ডুপ্লিকেট মেসেজ বাদ — Messenger audio call
+[28 Sep 19:10:30] কল ইভেন্ট বাদ — Messenger audio call: Audio call
+[28 Sep 19:10:02] API ব্যর্থ (টানা 7 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:10:02] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:09:59] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 19:09:59] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 19:09:43] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 19:09:43] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:09:43] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 19:09:43] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:09:42] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:06:40] API ব্যর্থ (টানা 6 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:06:40] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:06:37] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 19:06:37] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 19:06:32] লগ ডাম্প: /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (29443 বাইট)
+[28 Sep 19:06:26] প্রোভাইডার ডায়াগনোসিস: ব্লকড 0 টা বাদ যাবে
+[28 Sep 19:06:26]   #2 tokenharbor · https://tokenharbor.ai/v1 · id=0eed6276 · key=নেই (খালি) · selected=false
+[28 Sep 19:06:26]   #1 xkiro · https://api.xkiro.com/v1 · id=44a2bd0f · key=নেই (খালি) · selected=true
+[28 Sep 19:06:26] প্রোভাইডার ডায়াগনোসিস: প্রোফাইল 2 টা
+[28 Sep 19:06:26] প্রোভাইডার ডায়াগনোসিস: সিক্রেট নাম 0 টা — 
+[28 Sep 19:06:22] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 19:06:22] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 19:06:22] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:06:22] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:06:22] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:05:38] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 19:05:38] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 19:05:38] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:05:38] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:05:38] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:03:55] লগ ডাম্প: /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (28381 বাইট)
+[28 Sep 19:03:36] ✗ AI ব্যর্থ: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 19:03:35] AI পরীক্ষা শুরু — https://api.xkiro.com/v1 · qwen/qwen3.8-max:free
+[28 Sep 19:03:24] লগ ডাম্প: /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (27898 বাইট)
+[28 Sep 19:03:16] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 19:03:16] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 19:03:16] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:03:16] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:03:06] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 19:03:06] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 19:03:06] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:03:06] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 19:03:06] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:02:19] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 19:02:13] API ব্যর্থ (টানা 5 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:02:13] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 19:02:11] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 19:01:54] পরীক্ষা: এখন কোনো চ্যাট নোটিফিকেশন নেই
+[28 Sep 19:01:54] বুটের পর সার্ভিস চালু হলো
+[28 Sep 19:01:47] পরীক্ষা: এখন কোনো চ্যাট নোটিফিকেশন নেই
+[28 Sep 19:01:47] বুটের পর সার্ভিস চালু হলো
+[28 Sep 18:46:55] API ব্যর্থ (টানা 4 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:46:55] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:46:52] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 18:45:31] API ব্যর্থ (টানা 3 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:45:31] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:45:28] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 18:44:58] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 18:44:26] API ব্যর্থ (টানা 2 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:44:26] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:44:24] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 18:44:17] API ব্যর্থ (টানা 1 বার): HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:44:17] API ব্যর্থ — tokenharbor: HTTP 429 — {"error":{"message":"Too many failed authentication attempts. Try again later.","type":"rate_limit_exceeded","code":"rate_limit_exceeded"}}
+[28 Sep 18:44:14] API ব্যর্থ — xkiro: HTTP 401 — {"error":{"message":"Missing ClientApiKey. Send \"Authorization: Bearer <key>\" or the \"x-api-key\" header.","type":"authentication_error","code":"authentication_error"}}
+[28 Sep 18:38:30] ✓ AI ঠিক আছে (5181ms): ঠিক আছে
+[28 Sep 18:38:25] AI পরীক্ষা শুরু — https://api.xkiro.com/v1 · qwen/qwen3.8-max:free
+[28 Sep 18:38:23] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 18:38:23] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:23] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 18:38:23] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:22] লগ ডাম্প: /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (21736 বাইট)
+[28 Sep 18:38:17] প্রোভাইডার key সুরক্ষিত স্টোরেজে সরানো হলো (id-তে 2 টা, প্লেইনটেক্সট মুছে 0 টা)
+[28 Sep 18:38:15] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 18:38:15] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:15] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 18:38:15] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:14] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 18:38:14] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:14] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 18:38:14] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:13] বুটের পর সার্ভিস চালু হলো
+[28 Sep 18:38:08] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 18:38:08] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:08] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 18:38:08] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:38:08] বুটের পর সার্ভিস চালু হলো
+[28 Sep 18:33:52] লগ ডাম্প প্রোব: ✓ /storage/emulated/0/autoreplyai/log.txt (19309b) canWrite=true | ✓ /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (19309b) canWrite=true | ✓ /data/user/0/com.claw.autoreplyai/files/autoreplyai/log.txt (19309b) canWrite=true
+[28 Sep 18:33:44] উত্তর দেওয়া হলো না (দরকার নেই) — PendingTest: process-death probe
+[28 Sep 18:33:37] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 18:33:37] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:33:37] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 18:33:37] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:33:37] বুটের পর সার্ভিস চালু হলো
+[28 Sep 18:33:37] পেন্ডিং কিউ ফিরে এলো — 1 টা পাঠানো হবে
+[28 Sep 18:33:34] পেন্ডিং টেস্ট: কিউতে লেখা হলো — এখন `adb shell am force-stop com.claw.autoreplyai` চালিয়ে তারপর `--ez pendingcheck true` দিন
+[28 Sep 18:33:28] লগ ডাম্প প্রোব: ✓ /storage/emulated/0/autoreplyai/log.txt (17846b) canWrite=true | ✓ /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (17846b) canWrite=true | ✓ /data/user/0/com.claw.autoreplyai/files/autoreplyai/log.txt (17846b) canWrite=true
+[28 Sep 18:33:16] লগ ডাম্প প্রোব: ✓ /storage/emulated/0/autoreplyai/log.txt (17523b) canWrite=true | ✓ /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (17523b) canWrite=true | ✓ /data/user/0/com.claw.autoreplyai/files/autoreplyai/log.txt (17523b) canWrite=true
+[28 Sep 18:33:14] ✗ পেন্ডিং চেক ব্যর্থ: ফাইলে কিছুই নেই (সিড হয়নি?)
+[28 Sep 18:33:14] পেন্ডিং চেক: ডিস্কে 0 টা, মেমোরিতে 0 টা
+[28 Sep 18:33:13] চ্যাট খোলার উপায় নেই — মনের মাঝে তুমি (নোটিফিকেশনে reply অ্যাকশন পাওয়া যায়নি)
+[28 Sep 18:33:13] নোটিফিকেশনে reply অ্যাকশন নেই — বিকল্প পথে যাচ্ছি
+[28 Sep 18:33:07] লগ ডাম্প প্রোব: ✓ /storage/emulated/0/autoreplyai/log.txt (16578b) canWrite=true | ✓ /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (16578b) canWrite=true | ✓ /data/user/0/com.claw.autoreplyai/files/autoreplyai/log.txt (16578b) canWrite=true
+[28 Sep 18:33:03] উত্তর দেওয়া হলো না (দরকার নেই) — PendingTest: process-death probe
+[28 Sep 18:32:57] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 18:32:57] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:32:57] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 18:32:57] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:32:57] বুটের পর সার্ভিস চালু হলো
+[28 Sep 18:32:57] পেন্ডিং কিউ ফিরে এলো — 2 টা পাঠানো হবে
+[28 Sep 18:32:47] পেন্ডিং টেস্ট: কিউতে লেখা হলো — এখন `adb shell am force-stop com.claw.autoreplyai` চালিয়ে তারপর `--ez pendingcheck true` দিন
+[28 Sep 18:32:28] লগ ডাম্প প্রোব: ✓ /storage/emulated/0/autoreplyai/log.txt (15115b) canWrite=true | ✓ /storage/emulated/0/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt (15115b) canWrite=true | ✓ /data/user/0/com.claw.autoreplyai/files/autoreplyai/log.txt (15115b) canWrite=true
+[28 Sep 18:32:24] পরীক্ষা: চ্যাট নোটিফিকেশন 3 টার মধ্যে 1 টায় সরাসরি reply আছে
+[28 Sep 18:32:24] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:32:24] পরীক্ষা: Messenger নোটিফিকেশন — actions=2, সরাসরি reply আছে ✓
+[28 Sep 18:32:24] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:32:24] বুটের পর সার্ভিস চালু হলো
+[28 Sep 18:32:24] পেন্ডিং কিউ ফিরে এলো — 1 টা পাঠানো হবে
+[28 Sep 18:32:18] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 18:32:18] কুলডাউনে — মনের মাঝে তুমি (নতুন মেসেজটা পরে উত্তর দেওয়া হবে)
+[28 Sep 18:32:10] কুলডাউনে — মনের মাঝে তুমি (নতুন মেসেজটা পরে উত্তর দেওয়া হবে)
+[28 Sep 18:32:02] ডুপ্লিকেট মেসেজ বাদ — Chat heads active
+[28 Sep 18:32:02] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 18:32:02] ✓ রিপ্লাই → মনের মাঝে তুমি · কন্টেক্সট 0 অক্ষর
+    ◀ এসেছিল: হাই
+    ▶ গেল: হাই, কেমন আছেন?
+[28 Sep 18:32:02] ✓ নোটিফিকেশন থেকেই সরাসরি রিপ্লাই পাঠানো হলো
+[28 Sep 18:31:35] Instagram-এ অটো-রিপ্লাই চালু
+[28 Sep 18:31:33] Messenger-এ অটো-রিপ্লাই চালু
+[28 Sep 18:31:17] নাম্বার পাওয়া যায়নি — PendingTest (কন্টাক্ট পারমিশন দিন)
+[28 Sep 18:31:17] নোটিফিকেশনে reply অ্যাকশন নেই — বিকল্প পথে যাচ্ছি
+[28 Sep 18:31:07] ডুপ্লিকেট মেসেজ বাদ — Chat heads active
+[28 Sep 18:31:07] সিস্টেম নোটিফিকেশন বাদ (মেসেজ নয়) — Chat heads active
+[28 Sep 18:31:07] পরীক্ষা: চ্যাট নোটিফিকেশন 1 টার মধ্যে 0 টায় সরাসরি reply আছে
+[28 Sep 18:31:07] পরীক্ষা: Messenger নোটিফিকেশন — actions=0, সরাসরি reply নেই ✗
+[28 Sep 18:31:07] বুটের পর সার্ভিস চালু হলো
+[28 Sep 18:31:07] পেন্ডিং কিউ ফিরে এলো — 1 টা পাঠানো হবে
+[28 Sep 18:30:56] ডুপ্লিকেট মেসেজ বাদ — Chat heads active
