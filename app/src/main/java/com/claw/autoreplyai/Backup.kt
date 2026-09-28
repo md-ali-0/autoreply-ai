@@ -22,9 +22,18 @@ object Backup {
         val p = Prefs.get(ctx)
         val root = JSONObject()
         root.put("app", APP_TAG)
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("exportedAt", SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()))
         root.put("settings", p.exportJson())
+
+        // Provider list lives in a separate prefs file, so it must be captured
+        // explicitly — otherwise a restore brings back only the selected one.
+        val providerArr = JSONArray()
+        for (prov in AiProviderStore.all(ctx)) {
+            providerArr.put(prov.toJson())
+        }
+        root.put("providers", providerArr)
+        root.put("providerSelected", AiProviderStore.selectedIndex(ctx))
 
         val arr = JSONArray()
         for (e in ContactContext.all(ctx)) {
@@ -47,9 +56,10 @@ object Backup {
             throw IllegalArgumentException("ব্যাকআপ ফাইলের গঠন ঠিক নয়")
         }
         val settings = root.optJSONObject("settings")?.length() ?: 0
+        val providers = root.optJSONArray("providers")?.length() ?: 0
         val contexts = root.optJSONArray("contexts")?.length() ?: 0
         val memory = root.optJSONObject("memory")?.length() ?: 0
-        return "$settings টা সেটিংস, $contexts টা কন্টাক্ট কন্টেক্সট, $memory টা মেমোরি"
+        return "$settings টা সেটিংস, $providers টা প্রোভাইডার, $contexts টা কন্টাক্ট কন্টেক্সট, $memory টা মেমোরি"
     }
 
     /** Restores a snapshot and returns a short summary. Throws on a foreign file. */
@@ -60,6 +70,19 @@ object Backup {
         }
 
         root.optJSONObject("settings")?.let { Prefs.get(ctx).importJson(it) }
+
+        // Restore the full provider list (v2+). v1 snapshots have no "providers"
+        // key, so the existing providers on the device are left untouched.
+        root.optJSONArray("providers")?.let { arr ->
+            val list = ArrayList<AiProvider>(arr.length())
+            for (i in 0 until arr.length()) {
+                list.add(AiProvider.fromJson(arr.getJSONObject(i)))
+            }
+            if (list.isNotEmpty()) {
+                AiProviderStore.save(ctx, list)
+                AiProviderStore.setSelected(ctx, root.optInt("providerSelected", 0))
+            }
+        }
 
         var contacts = 0
         root.optJSONArray("contexts")?.let { arr ->
