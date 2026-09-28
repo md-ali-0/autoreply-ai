@@ -142,6 +142,8 @@
     <string name="voice_key_hint">খালি রাখলে চ্যাট প্রোভাইডারের কী ব্যবহার হবে</string>
     <string name="auto_language">কন্টাক্টের ভাষায় উত্তর</string>
     <string name="auto_language_sub">ইংরেজিতে লিখলে ইংরেজিতে, বাংলায় লিখলে বাংলায়। বন্ধ থাকলে সবসময় বাংলায়।</string>
+    <string name="mirror_register">সবাইকে আগে "আপনি", পরে তাদের মতো</string>
+    <string name="mirror_register_sub">ডিফল্টভাবে সবাইকে "আপনি" বলে ডাকবে। কেউ "তুই" বা "তুমি" বলে কথা বললে তখন থেকে সেভাবেই উত্তর দেবে।</string>
     <string name="approval_mode">পাঠানোর আগে অনুমোদন নেবে</string>
     <string name="approval_mode_sub">AI নিজে পাঠাবে না — নোটিফিকেশনে খসড়া দেখাবে, আপনি "পাঠাও" চাপলে যাবে।</string>
     <string name="audio_perm">সব ফাইল পড়ার অনুমতি (ভয়েস মেসেজের জন্য)</string>

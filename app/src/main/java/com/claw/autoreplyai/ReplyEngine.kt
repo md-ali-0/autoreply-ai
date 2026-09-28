@@ -605,6 +605,12 @@ object ReplyEngine {
             sb.append('\n').append(p.safetyRule.trim()).append('\n')
         }
 
+        // Register comes before language/voice rules: getting the pronoun wrong is
+        // the fastest way to sound either rude or creepily familiar.
+        if (p.mirrorRegister) {
+            sb.append('\n').append(REGISTER_RULE).append('\n')
+        }
+
         if (p.autoLanguage) {
             sb.append('\n').append(LANGUAGE_RULE).append('\n')
         }
@@ -635,6 +641,39 @@ object ReplyEngine {
           অথবা ভদ্রভাবে বলো ঠিক বুঝতে পারোনি, একবার আবার বলতে
         - অনুমান করে কোনো তথ্য, নাম বা প্রতিশ্রুতি বানিয়ে বলবে না
         - নিশ্চিত না হলে প্রশ্ন করে জিজ্ঞেস করো, নিজে থেকে মন্তব্য করো না
+    """.trimIndent()
+
+    /**
+     * Address people the way they address you — and default to the polite form.
+     *
+     * Bangla has three second-person registers and picking the wrong one is loud:
+     * "তুই" to a stranger is insulting, "আপনি" to your wife is cold. There is no
+     * safe single choice, so the default is formal and the contact's own usage
+     * overrides it. The history is in the prompt, so an established register
+     * survives messages that happen to contain no pronoun at all.
+     */
+    private val REGISTER_RULE = """
+        সম্বোধন ঠিক করার নিয়ম — উত্তর লেখার আগে সবার আগে এটা ঠিক করবে:
+
+        ১. এই মেসেজটা দেখো: কন্টাক্ট তোমাকে কী বলে সম্বোধন করেছে?
+           • "তুই" বললে → তুমিও "তুই" বলবে
+           • "তুমি" বললে → তুমিও "তুমি" বলবে
+           • "আপনি" বললে → তুমিও "আপনি" বলবে
+        ২. এই মেসেজে কোনো সম্বোধন না থাকলে আগের চ্যাট দেখো — ওখানে যে সম্বোধন
+           চলে আসছে, সেটাই ধরে রাখবে।
+        ৩. কোথাও কোনো সম্বোধন না পেলে "আপনি" দিয়ে উত্তর দেবে। এটাই ডিফল্ট।
+        ৪. ক্রিয়াপদও সম্বোধনের সাথে মিলিয়ে দাও —
+           তুই → আছিস, খেয়েছিস, আসিস  ·  তুমি → আছো, খেয়েছো, আসো
+           আপনি → আছেন, খেয়েছেন, আসেন
+        ৫. নিশ্চিত না হলে "আপনি"। ভুল করে বেশি ঘনিষ্ঠ হয়ে যাওয়ার চেয়ে
+           বেশি ভদ্র হয়ে যাওয়া অনেক ভালো।
+        ৬. একবার কোনো কন্টাক্টের সম্বোধন ঠিক হলে সেটাই ধরে রাখবে —
+           মাঝে মাঝে বদলাবে না।
+
+        উদাহরণ:
+        • কন্টাক্ট: "খেয়েছেন?"            → "হ্যাঁ, খেয়েছি। আপনি খেয়েছেন?"
+        • কন্টাক্ট: "তুমি কেমন আছো?"      → "ভালো আছি, তুমি কেমন আছো?"
+        • কন্টাক্ট: "তুই কেমন আছিস?"      → "ভালো আছি, তুই কেমন আছিস?"
     """.trimIndent()
 
     /**
@@ -706,6 +745,9 @@ object ReplyEngine {
         sb.append("তোমার কাজ কারো মেসেজের উত্তর দেওয়া এবং জরুরি মেসেজ চিনতে পারা।\n\n")
         sb.append("কন্টাক্টের নাম: ").append(sender).append('\n')
         sb.append("এখন সময়: ").append(clockText()).append("\n\n")
+        if (p.mirrorRegister) {
+            sb.append(REGISTER_RULE).append("\n\n")
+        }
         if (p.autoLanguage) {
             sb.append(LANGUAGE_RULE).append("\n\n")
         }

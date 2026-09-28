@@ -40,6 +40,7 @@ class AiFragment : BaseSettingsFragment() {
         b.switchFailAlert.setOnCheckedChangeListener { _, v -> prefs.failAlert = v }
         b.switchTranscribe.setOnCheckedChangeListener { _, v -> prefs.transcribeVoice = v }
         b.switchAutoLanguage.setOnCheckedChangeListener { _, v -> prefs.autoLanguage = v }
+        b.switchRegister.setOnCheckedChangeListener { _, v -> prefs.mirrorRegister = v }
         b.switchApproval.setOnCheckedChangeListener { _, v -> prefs.approvalMode = v }
 
         b.btnAddProvider.setOnClickListener { addProvider() }
@@ -64,6 +65,7 @@ class AiFragment : BaseSettingsFragment() {
         b.switchFailAlert.isChecked = prefs.failAlert
         b.switchTranscribe.isChecked = prefs.transcribeVoice
         b.switchAutoLanguage.isChecked = prefs.autoLanguage
+        b.switchRegister.isChecked = prefs.mirrorRegister
         b.switchApproval.isChecked = prefs.approvalMode
         b.etTranscribeModel.setText(prefs.transcribeModel)
         b.etTranscribeLanguage.setText(prefs.transcribeLanguage)

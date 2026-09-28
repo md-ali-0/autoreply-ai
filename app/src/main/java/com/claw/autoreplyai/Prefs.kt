@@ -117,6 +117,14 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getBoolean("autoLanguage", true)
         set(v) = sp.edit().putBoolean("autoLanguage", v).apply()
 
+    /**
+     * Address everyone with "আপনি" by default, and follow the contact's own
+     * register once they use "তুই"/"তুমি". Off = the model chooses freely.
+     */
+    var mirrorRegister: Boolean
+        get() = sp.getBoolean("mirrorRegister", true)
+        set(v) = sp.edit().putBoolean("mirrorRegister", v).apply()
+
     // ---------- approval ----------
     /** Show the drafted reply for approval instead of sending it automatically. */
     var approvalMode: Boolean
