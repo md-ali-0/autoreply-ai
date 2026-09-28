@@ -47,8 +47,10 @@ class AiFragment : BaseSettingsFragment() {
         b.btnAddProvider.setOnClickListener { addProvider() }
         b.btnDeleteProvider.setOnClickListener { deleteProvider() }
 
+        // Save the current provider's fields before switching, so no edit is lost.
         b.spinnerProvider.setOnItemClickListener { _, _, position, _ ->
             if (ignoreSelection) return@setOnItemClickListener
+            commitCurrentProvider()
             selectedIndex = position.coerceIn(0, providers.lastIndex)
             loadProviderFields(selectedIndex)
         }
@@ -83,16 +85,8 @@ class AiFragment : BaseSettingsFragment() {
         if (!viewReady) return
 
         // Update the currently selected provider in the list.
-        if (providers.isNotEmpty() && selectedIndex in providers.indices) {
-            providers[selectedIndex] = AiProvider(
-                name = b.etProviderName.text?.toString().orEmpty().ifBlank { "Provider ${selectedIndex + 1}" },
-                baseUrl = b.etBase.text?.toString().orEmpty(),
-                apiKey = b.etKey.text?.toString().orEmpty(),
-                model = b.etModel.text?.toString().orEmpty()
-            )
-            AiProviderStore.save(requireContext(), providers)
-            AiProviderStore.setSelected(requireContext(), selectedIndex)
-        }
+        commitCurrentProvider()
+        AiProviderStore.setSelected(requireContext(), selectedIndex)
 
         // Also copy the selected provider into legacy prefs so ReplyEngine keeps working
         // without any changes.
@@ -112,14 +106,30 @@ class AiFragment : BaseSettingsFragment() {
 
     private fun refreshProviderSpinner() {
         val names = providers.map { it.name.ifBlank { "Provider" } }
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, names)
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, names)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         ignoreSelection = true
         b.spinnerProvider.setAdapter(adapter)
+        // Force the dropdown to show all items — AutoCompleteTextView filters by
+        // default, which can hide providers that do not match the current text.
+        b.spinnerProvider.threshold = 0
         if (selectedIndex in names.indices) {
             b.spinnerProvider.setText(names[selectedIndex], false)
         }
         ignoreSelection = false
         b.btnDeleteProvider.isEnabled = providers.size > 1
+    }
+
+    /** Write the on-screen fields back into the current provider before switching. */
+    private fun commitCurrentProvider() {
+        if (providers.isEmpty() || selectedIndex !in providers.indices) return
+        providers[selectedIndex] = AiProvider(
+            name = b.etProviderName.text?.toString().orEmpty().ifBlank { "Provider ${selectedIndex + 1}" },
+            baseUrl = b.etBase.text?.toString().orEmpty(),
+            apiKey = b.etKey.text?.toString().orEmpty(),
+            model = b.etModel.text?.toString().orEmpty()
+        )
+        AiProviderStore.save(requireContext(), providers)
     }
 
     private fun loadProviderFields(index: Int) {
@@ -132,13 +142,13 @@ class AiFragment : BaseSettingsFragment() {
     }
 
     private fun addProvider() {
-        save()
+        commitCurrentProvider()
         val newName = "Provider ${providers.size + 1}"
         val newP = AiProvider(
             name = newName,
-            baseUrl = b.etBase.text?.toString().orEmpty(),
-            apiKey = b.etKey.text?.toString().orEmpty(),
-            model = b.etModel.text?.toString().orEmpty()
+            baseUrl = "",
+            apiKey = "",
+            model = ""
         )
         providers.add(newP)
         AiProviderStore.save(requireContext(), providers)
@@ -154,13 +164,21 @@ class AiFragment : BaseSettingsFragment() {
             toast("শেষ প্রোভাইডার মুছা যাবে না")
             return
         }
+        val removedName = providers[selectedIndex].name.ifBlank { "Provider" }
         providers.removeAt(selectedIndex)
         AiProviderStore.save(requireContext(), providers)
         selectedIndex = selectedIndex.coerceAtMost(providers.lastIndex)
         AiProviderStore.setSelected(requireContext(), selectedIndex)
         refreshProviderSpinner()
         loadProviderFields(selectedIndex)
-        toast("মুছে দেওয়া হলো")
+        // Sync legacy prefs to the new selection.
+        if (providers.isNotEmpty() && selectedIndex in providers.indices) {
+            val p = providers[selectedIndex]
+            prefs.baseUrl = p.baseUrl
+            prefs.apiKey = p.apiKey
+            prefs.model = p.model
+        }
+        toast("$removedName মুছে দেওয়া হলো")
     }
 
     private fun testAi() {
