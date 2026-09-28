@@ -16,7 +16,7 @@
         android:paddingStart="20dp"
         android:paddingTop="22dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="20dp">
+        android:paddingBottom="18dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -25,11 +25,11 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="46dp"
-                android:layout_height="46dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="@drawable/bg_hero_badge"
                 android:contentDescription="@string/app_name"
-                android:padding="11dp"
+                android:padding="10dp"
                 android:src="@drawable/ic_bolt" />
 
             <LinearLayout
@@ -45,13 +45,16 @@
                     android:layout_height="wrap_content"
                     android:text="@string/app_name"
                     android:textColor="#FFFFFF"
-                    android:textSize="21sp"
+                    android:textSize="20sp"
                     android:textStyle="bold" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/tvHeroModel"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
+                    android:ellipsize="middle"
+                    android:maxLines="1"
                     android:text="@string/hero_subtitle"
                     android:textColor="@color/hero_text_dim"
                     android:textSize="11sp" />
@@ -69,14 +72,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="14dp"
             android:background="@drawable/bg_hero_pill"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="14dp"
-            android:paddingTop="10dp"
+            android:paddingTop="9dp"
             android:paddingEnd="14dp"
-            android:paddingBottom="10dp">
+            android:paddingBottom="9dp">
 
             <View
                 android:id="@+id/dotHero"
@@ -86,8 +89,9 @@
 
             <TextView
                 android:id="@+id/tvHeroStatus"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:paddingStart="9dp"
                 android:text="@string/state_off"
                 android:textColor="#FFFFFF"
@@ -95,47 +99,33 @@
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/tvHeroModel"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="end"
-                android:maxLines="1"
+                android:text="@string/mood_sleeping"
                 android:textColor="@color/hero_text_dim"
                 android:textSize="11sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/mood_sleeping"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switchMood"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
                 app:thumbTint="@color/switch_thumb"
                 app:trackDecorationTint="@android:color/transparent"
                 app:trackTint="@color/switch_track" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- ================= TABS ================= -->
+    <!--
+      Secondary tabs: only shown for sections that hold more than one page.
+      Keeps the six destinations intact without six cramped tabs in a row.
+    -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabs"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/card"
+        android:visibility="gone"
         app:tabGravity="fill"
         app:tabIndicatorColor="@color/brand"
         app:tabIndicatorFullWidth="false"
@@ -150,11 +140,13 @@
         app:tabTextColor="@color/text_dim" />
 
     <View
+        android:id="@+id/tabDivider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/stroke" />
+        android:background="@color/stroke"
+        android:visibility="gone" />
 
-    <!-- ================= TAB CONTENT ================= -->
+    <!-- ================= CONTENT ================= -->
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/pager"
         android:layout_width="match_parent"
@@ -167,19 +159,35 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/card"
-        android:elevation="14dp"
         android:orientation="vertical"
         android:paddingStart="14dp"
-        android:paddingTop="11dp"
+        android:paddingTop="10dp"
         android:paddingEnd="14dp"
-        android:paddingBottom="14dp">
+        android:paddingBottom="10dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="48dp"
             android:text="@string/save"
             android:textSize="15sp"
-            app:cornerRadius="16dp" />
+            app:cornerRadius="14dp" />
     </LinearLayout>
+
+    <!-- ================= BOTTOM NAVIGATION ================= -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/stroke" />
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/card"
+        app:itemActiveIndicatorStyle="@null"
+        app:itemIconTint="@color/nav_item"
+        app:itemTextColor="@color/nav_item"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/main_nav" />
 </LinearLayout>

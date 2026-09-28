@@ -37,6 +37,14 @@ class ContactsFragment : BaseSettingsFragment() {
 
     override fun save() {
         if (!viewReady) return
+        // The switches also persist on toggle, but writing them here as well means a
+        // global Save always stores what is actually on screen. Without this, a
+        // switch could sit unchecked while prefs still said otherwise — which for a
+        // safety setting like "never reply to unknown numbers" is the wrong way round.
+        prefs.onlyContacts = b.switchOnlyContacts.isChecked
+        prefs.skipGroups = b.switchSkipGroups.isChecked
+        prefs.skipUnknown = b.switchSkipUnknown.isChecked
+
         prefs.contactList = b.etContactList.text?.toString().orEmpty()
         prefs.neverReply = b.etNeverReply.text?.toString().orEmpty()
         prefs.countryCode = b.etCountryCode.text?.toString().orEmpty().ifBlank { "880" }

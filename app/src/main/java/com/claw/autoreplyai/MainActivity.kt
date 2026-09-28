@@ -2,6 +2,7 @@ package com.claw.autoreplyai
 
 import android.content.res.ColorStateList
 import android.os.Bundle
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -11,15 +12,19 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.viewpager2.widget.ViewPager2
 import com.claw.autoreplyai.databinding.ActivityMainBinding
-import com.google.android.material.tabs.TabLayoutMediator
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Hosts the fixed hero header, the tab strip, the pager and the save bar.
- * All editable settings live in the five [BaseSettingsFragment] tabs.
+ * Hosts the hero header, the bottom navigation, the per-section sub-tabs, the pager
+ * and the save bar.
+ *
+ * Four bottom-navigation sections hold the six original screens: setup
+ * (permissions, AI), people (contacts, context) and activity (timing, logs) each
+ * show a secondary tab row, while home is a single page.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -33,7 +38,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(b.root)
 
         setupWindow()
-        setupTabs()
+        setupNavigation()
         // Must be set BEFORE bindHero() attaches the listener, otherwise restoring
         // the saved state would fire it and start/stop the service spuriously.
         b.switchEnabled.isChecked = p.enabled
@@ -137,6 +142,14 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_AITEST = "aitest"
         const val EXTRA_VOICETEST = "voicetest"
         const val EXTRA_CLOUDTEST = "cloudtest"
+
+        /** Bottom-navigation menu id for each section, indexed by section. */
+        val SECTION_MENU_ID = intArrayOf(
+            R.id.nav_home,
+            R.id.nav_setup,
+            R.id.nav_people,
+            R.id.nav_activity
+        )
     }
 
     override fun onResume() {
@@ -162,29 +175,106 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(b.root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             b.heroContainer.updatePadding(top = bars.top + dp(22))
-            b.saveBar.updatePadding(bottom = bars.bottom + dp(14))
+            b.bottomNav.updatePadding(bottom = bars.bottom)
             insets
         }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
-    // -------------------------------------------------------------------- tabs
+    // -------------------------------------------------------------- navigation
 
-    private fun setupTabs() {
+    /** Guards the bottom-nav / pager feedback loop while we set one from the other. */
+    private var syncing = false
+
+    private fun setupNavigation() {
         adapter = TabsAdapter(this)
         b.pager.adapter = adapter
         b.pager.offscreenPageLimit = 1
 
-        TabLayoutMediator(b.tabs, b.pager) { tab, position ->
-            tab.setText(TabsAdapter.TITLES[position])
-        }.attach()
+        b.bottomNav.setOnItemSelectedListener { item ->
+            goToSection(menuIdToSection(item.itemId))
+            true
+        }
+
+        // Sub-tabs are rebuilt per section, so they are wired by hand rather than
+        // with a mediator that would insist on showing all seven.
+        b.tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                if (syncing) return
+                val section = TabsAdapter.sectionOf(b.pager.currentItem)
+                val target = TabsAdapter.SECTION_FIRST_PAGE[section] + tab.position
+                if (target != b.pager.currentItem) b.pager.setCurrentItem(target, true)
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
 
         b.pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
+                if (!syncing) {
+                    val section = TabsAdapter.sectionOf(position)
+                    renderSectionChrome(section, position)
+
+                    val menuId = SECTION_MENU_ID[section]
+                    if (b.bottomNav.selectedItemId != menuId) {
+                        syncing = true
+                        b.bottomNav.selectedItemId = menuId
+                        syncing = false
+                    }
+                }
                 fragmentAt(position)?.onShown()
             }
         })
+
+        goToSection(TabsAdapter.SECTION_HOME)
+    }
+
+    /** Jump to a section, optionally to one specific page inside it. */
+    fun goToSection(section: Int, page: Int = -1) {
+        val first = TabsAdapter.SECTION_FIRST_PAGE[section]
+        val target = if (page < 0) first else page
+
+        if (b.bottomNav.selectedItemId != SECTION_MENU_ID[section]) {
+            syncing = true
+            b.bottomNav.selectedItemId = SECTION_MENU_ID[section]
+            syncing = false
+        }
+        if (b.pager.currentItem != target) b.pager.setCurrentItem(target, false)
+        renderSectionChrome(section, target)
+    }
+
+    /** Show the sub-tab row only when the section actually holds several pages. */
+    private fun renderSectionChrome(section: Int, page: Int) {
+        val first = TabsAdapter.SECTION_FIRST_PAGE[section]
+        val count = TabsAdapter.SECTION_PAGES[section]
+
+        syncing = true
+        b.tabs.removeAllTabs()
+        if (count > 1) {
+            for (i in 0 until count) {
+                b.tabs.addTab(b.tabs.newTab().setText(TabsAdapter.TITLES[first + i]))
+            }
+            b.tabs.visibility = View.VISIBLE
+            b.tabDivider.visibility = View.VISIBLE
+            val index = (page - first).coerceIn(0, count - 1)
+            b.tabs.getTabAt(index)?.select()
+        } else {
+            b.tabs.visibility = View.GONE
+            b.tabDivider.visibility = View.GONE
+        }
+        syncing = false
+
+        // Home is read-only, so a Save button there would be a lie.
+        b.saveBar.visibility = if (section == TabsAdapter.SECTION_HOME) View.GONE else View.VISIBLE
+    }
+
+    private fun menuIdToSection(menuId: Int): Int = when (menuId) {
+        R.id.nav_setup -> TabsAdapter.SECTION_SETUP
+        R.id.nav_people -> TabsAdapter.SECTION_PEOPLE
+        R.id.nav_activity -> TabsAdapter.SECTION_ACTIVITY
+        else -> TabsAdapter.SECTION_HOME
     }
 
     /** ViewPager2 tags its fragments "f" + itemId; our itemId is the position. */
@@ -215,6 +305,7 @@ class MainActivity : AppCompatActivity() {
             }
             refreshHero()
             (fragmentAt(TabsAdapter.TAB_LOGS) as? LogsFragment)?.refresh()
+            (fragmentAt(TabsAdapter.TAB_HOME) as? HomeFragment)?.onShown()
         }
 
         b.switchMood.setOnCheckedChangeListener { _, checked ->
@@ -247,6 +338,6 @@ class MainActivity : AppCompatActivity() {
                 else -> R.color.hero_off
             })
         )
-        b.tvHeroModel.text = if (p.model.isBlank()) "" else p.model
+        b.tvHeroModel.text = p.model.ifBlank { getString(R.string.hero_subtitle) }
     }
 }

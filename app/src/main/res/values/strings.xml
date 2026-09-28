@@ -106,6 +106,28 @@
     <string name="tab_timing">টাইমিং</string>
     <string name="tab_logs">লগ</string>
 
+    <!-- ===== navigation ===== -->
+    <string name="nav_home">হোম</string>
+    <string name="nav_setup">সেটআপ</string>
+    <string name="nav_people">মানুষ</string>
+    <string name="nav_activity">কার্যক্রম</string>
+    <string name="home_title">এক নজরে</string>
+    <string name="home_sub">অ্যাপ ঠিকঠাক চলছে কি না, আর কী করা বাকি — সব এখানে।</string>
+    <string name="home_health">স্বাস্থ্য পরীক্ষা</string>
+    <string name="home_ready">সব ঠিক আছে</string>
+    <string name="home_needs">%1$d টা জিনিস ঠিক করা বাকি</string>
+    <string name="home_fix">ঠিক করুন</string>
+    <string name="home_stats">আজকের হিসাব</string>
+    <string name="home_stat_replies">উত্তর পাঠানো হয়েছে</string>
+    <string name="home_stat_waiting">আপনার উত্তর দরকার</string>
+    <string name="home_stat_skipped">উত্তর দেওয়া হয়নি</string>
+    <string name="home_shortcuts">দ্রুত কাজ</string>
+    <string name="home_goto_setup">সেটআপ দেখুন</string>
+    <string name="home_goto_people">কন্টাক্ট নিয়ম</string>
+    <string name="home_goto_logs">লগ দেখুন</string>
+    <string name="home_goto_backup">ব্যাকআপ</string>
+    <string name="home_no_stats">আজ এখনো কোনো মেসেজ আসেনি।</string>
+
     <!-- ===== per-contact context ===== -->
     <string name="context_intro">প্রতিটি কন্টাক্টের জন্য আলাদা কন্টেক্সট রাখতে পারবেন। AI শুধু সেই কন্টাক্টকে উত্তর দেওয়ার সময়ই তার কন্টেক্সট পড়বে — অন্য কারো কন্টেক্সট কখনো দেখবে না।</string>
     <string name="safety_label">নিরাপত্তার নিয়ম</string>

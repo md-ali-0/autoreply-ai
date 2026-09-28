@@ -1,0 +1,104 @@
+package com.claw.autoreplyai
+
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import com.claw.autoreplyai.databinding.FragmentHomeBinding
+
+/**
+ * The landing screen: is the app healthy, what happened today, and what still
+ * needs doing.
+ *
+ * Before this existed the app opened straight onto the permissions list, so the
+ * first thing a user saw was a chore rather than an answer to "is it working?".
+ *
+ * Read-only by design — every number here is derived from state that lives
+ * somewhere else, and the shortcuts simply switch sections.
+ */
+class HomeFragment : BaseSettingsFragment() {
+
+    private var _b: FragmentHomeBinding? = null
+    private val b get() = _b!!
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _b = FragmentHomeBinding.inflate(inflater, container, false)
+        return b.root
+    }
+
+    override fun onViewsReady() {
+        b.btnHomeFix.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_SETUP) }
+        b.btnHomeSetup.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_SETUP) }
+        b.btnHomePeople.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_PEOPLE) }
+        b.btnHomeLogs.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_ACTIVITY, TabsAdapter.TAB_LOGS) }
+        b.btnHomeBackup.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_PEOPLE, TabsAdapter.TAB_CONTEXT) }
+    }
+
+    override fun load() = refresh()
+
+    override fun save() {
+        // Read-only screen: nothing here is persisted.
+    }
+
+    override fun onShown() = refresh()
+
+    private fun refresh() {
+        if (!viewReady) return
+        val ctx = requireContext()
+
+        // ---- health ----
+        val checks = listOf(
+            isNotificationAccessEnabled() to getString(R.string.notif_access),
+            SendAccessibilityService.isRunning() to getString(R.string.acc_service),
+            ContactResolver.hasPermission(ctx) to getString(R.string.contacts_perm),
+            VoiceTranscriber.hasVoiceAccess(ctx) to getString(R.string.audio_perm),
+            prefs.cloudConfigured() to getString(R.string.cloud_label),
+        )
+        val missing = checks.filter { !it.first }
+
+        b.tvHomeHealth.text = if (missing.isEmpty()) {
+            getString(R.string.home_ready)
+        } else {
+            getString(R.string.home_needs, missing.size)
+        }
+        b.tvHomeHealthDetail.text = if (missing.isEmpty()) {
+            checks.joinToString(" · ") { it.second }
+        } else {
+            missing.joinToString(" · ") { it.second }
+        }
+        b.btnHomeFix.visibility = if (missing.isEmpty()) View.GONE else View.VISIBLE
+
+        // ---- today's numbers, from the digest ledger ----
+        val since = startOfToday()
+        val today = DigestStore.read(ctx).filter { it.at >= since }
+        b.tvStatReplies.text = today.count { it.action == DigestStore.ACTION_REPLIED }.toString()
+        b.tvStatWaiting.text = today.count {
+            it.action == DigestStore.ACTION_HELD ||
+                    it.action == DigestStore.ACTION_APPROVAL
+        }.toString()
+        b.tvStatSkipped.text = today.count { it.action == DigestStore.ACTION_BLOCKED }.toString()
+        b.tvHomeStatsEmpty.visibility = if (today.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun startOfToday(): Long {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
+    private fun isNotificationAccessEnabled(): Boolean =
+        androidx.core.app.NotificationManagerCompat
+            .getEnabledListenerPackages(requireContext())
+            .contains(requireContext().packageName)
+
+    override fun onViewsGone() {
+        _b = null
+    }
+}
