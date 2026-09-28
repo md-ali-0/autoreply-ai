@@ -193,17 +193,18 @@ object ReplyEngine {
     ) {
         // Voice notes arrive as a placeholder ("🎤 Voice message"). Turn them into
         // text first, otherwise the model is answering the word "Voice message".
-        val text = resolveIncomingText(app, p, pkg, sender, message)
+        val incoming = resolveIncomingText(app, p, pkg, sender, message)
+        val text = incoming.text
         if (text.isBlank()) return
 
         if (p.moodEnabled) {
-            handleMood(app, p, pkg, sender, text, phoneHint, direct, contentIntent)
+            handleMood(app, p, pkg, sender, text, phoneHint, direct, contentIntent, incoming.fromVoice)
             return
         }
 
         val messages = ArrayList<AiClient.Msg>()
         val contactContext = ContactContext.forContact(app, sender)
-        messages.add(AiClient.Msg("system", buildSystemPrompt(p, sender, contactContext)))
+        messages.add(AiClient.Msg("system", buildSystemPrompt(p, sender, contactContext, incoming.fromVoice)))
         messages.addAll(trimmedHistory(app, sender))
         messages.add(AiClient.Msg("user", text))
 
@@ -264,8 +265,11 @@ object ReplyEngine {
         deliverReply(app, p, pkg, sender, text, finalText, reply, contactContext.length, phoneHint, direct, contentIntent)
     }
 
+    /** An incoming message, plus whether it came from a (possibly imperfect) transcript. */
+    private data class Incoming(val text: String, val fromVoice: Boolean)
+
     /**
-     * Replaces a voice-note placeholder with its transcript. Returns a blank string
+     * Replaces a voice-note placeholder with its transcript. Returns blank text
      * when the note cannot be read — a reply to the words "Voice message" helps
      * nobody, so the message is skipped and the reason is logged instead.
      */
@@ -275,14 +279,14 @@ object ReplyEngine {
         pkg: String,
         sender: String,
         message: String
-    ): String {
-        if (!p.transcribeVoice) return message
-        if (!VoiceTranscriber.looksLikeVoiceNote(message)) return message
+    ): Incoming {
+        if (!p.transcribeVoice) return Incoming(message, fromVoice = false)
+        if (!VoiceTranscriber.looksLikeVoiceNote(message)) return Incoming(message, fromVoice = false)
 
         if (!MessagingApps.canTranscribeVoice(pkg)) {
             log(app, "ভয়েস মেসেজ — ${MessagingApps.label(pkg)}-এর অডিও পড়া যায় না, তাই উত্তর দেওয়া হচ্ছে না — $sender")
             digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
-            return ""
+            return Incoming("", fromVoice = true)
         }
 
         log(app, "ভয়েস মেসেজ পেয়েছি — ট্রান্সক্রিপ্ট করছি — $sender")
@@ -290,10 +294,10 @@ object ReplyEngine {
         if (transcript.isNullOrBlank()) {
             log(app, "ভয়েস মেসেজ পড়া গেল না — $sender")
             digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
-            return ""
+            return Incoming("", fromVoice = true)
         }
         log(app, "ভয়েস ট্রান্সক্রিপ্ট ($sender): ${transcript.take(90)}")
-        return transcript
+        return Incoming(transcript, fromVoice = true)
     }
 
     private fun digest(
@@ -331,10 +335,11 @@ object ReplyEngine {
         message: String,
         phoneHint: String?,
         direct: DirectReplier.Handle?,
-        contentIntent: PendingIntent?
+        contentIntent: PendingIntent?,
+        fromVoice: Boolean = false
     ) {
         val messages = ArrayList<AiClient.Msg>()
-        messages.add(AiClient.Msg("system", buildGatekeeperPrompt(p, sender)))
+        messages.add(AiClient.Msg("system", buildGatekeeperPrompt(p, sender, fromVoice)))
         messages.addAll(trimmedHistory(app, sender))
         messages.add(AiClient.Msg("user", message))
 
@@ -468,11 +473,13 @@ object ReplyEngine {
         // app echoes it back as a new notification.
         SentMessageTracker.record(reply)
         digest(app, pkg, sender, message, DigestStore.ACTION_REPLIED, reply)
-        // The context length is shown so a broken contact-name match is visible
-        // instead of silently producing replies that ignore the context.
+        // Both sides of the exchange are logged so a bad transcript is visible
+        // right next to the reply it caused, instead of two lines apart.
         log(
             app,
-            "✓ রিপ্লাই → $sender · কন্টেক্সট $contextChars অক্ষর: ${reply.replace("\n", " ").take(100)}"
+            "✓ রিপ্লাই → $sender · কন্টেক্সট $contextChars অক্ষর\n" +
+                    "    ◀ এসেছিল: ${message.replace("\n", " ").take(90)}\n" +
+                    "    ▶ গেল: ${reply.replace("\n", " ").take(90)}"
         )
     }
 
@@ -556,7 +563,12 @@ object ReplyEngine {
             .any { it.isNotEmpty() && s.contains(it) }
     }
 
-    private fun buildSystemPrompt(p: Prefs, sender: String, contactContext: String): String {
+    private fun buildSystemPrompt(
+        p: Prefs,
+        sender: String,
+        contactContext: String,
+        fromVoice: Boolean = false
+    ): String {
         val sb = StringBuilder()
         sb.append(p.persona.trim()).append("\n\n")
         sb.append("কন্টাক্টের নাম: ").append(sender).append('\n')
@@ -597,10 +609,33 @@ object ReplyEngine {
             sb.append('\n').append(LANGUAGE_RULE).append('\n')
         }
 
+        if (fromVoice) {
+            sb.append('\n').append(VOICE_NOTE_RULE).append('\n')
+        }
+
         sb.append('\n')
         sb.append(if (p.smartTriage) TRIAGE_RULES else PLAIN_RULES)
         return sb.toString()
     }
+
+    /**
+     * A voice note reaches the model as an automatic transcript, and short Bengali
+     * clips transcribe badly — a 3-second "নিমাই, কেমন আছেন?" came back as
+     * "নিমাই কামানা ফেন". Left alone, the model treats that as real text and
+     * confidently answers something the person never said. So it is told plainly
+     * that the text is a guess.
+     */
+    private val VOICE_NOTE_RULE = """
+        ⚠️ এই মেসেজটা একটা ভয়েস মেসেজ — স্বয়ংক্রিয়ভাবে টেক্সটে রূপান্তর করা, তাই
+        শব্দ ভুল হতে পারে বা অর্থহীন লাগতে পারে।
+
+        নিয়ম:
+        - ট্রান্সক্রিপ্টে যা নেই, এমন কিছু ধরে নিয়ে উত্তর দেবে না
+        - বুঝতে না পারলে ছোট আর নিরাপদ উত্তর দাও (যেমন "হুম", "ঠিক আছে", "বলো"),
+          অথবা ভদ্রভাবে বলো ঠিক বুঝতে পারোনি, একবার আবার বলতে
+        - অনুমান করে কোনো তথ্য, নাম বা প্রতিশ্রুতি বানিয়ে বলবে না
+        - নিশ্চিত না হলে প্রশ্ন করে জিজ্ঞেস করো, নিজে থেকে মন্তব্য করো না
+    """.trimIndent()
 
     /**
      * Answering an English message in Bangla is the fastest way to look like a bot,
@@ -664,7 +699,7 @@ object ReplyEngine {
 
     // ----------------------------------------------------- sleeping mode
 
-    private fun buildGatekeeperPrompt(p: Prefs, sender: String): String {
+    private fun buildGatekeeperPrompt(p: Prefs, sender: String, fromVoice: Boolean = false): String {
         val sb = StringBuilder()
         sb.append("তুমি ").append(p.assistantName).append("। Ali-র assistant।\n")
         sb.append("Ali এখন ").append(p.moodText).append("।\n")
@@ -673,6 +708,10 @@ object ReplyEngine {
         sb.append("এখন সময়: ").append(clockText()).append("\n\n")
         if (p.autoLanguage) {
             sb.append(LANGUAGE_RULE).append("\n\n")
+        }
+        if (fromVoice) {
+            sb.append(VOICE_NOTE_RULE).append("\n\n")
+            sb.append("⚠️ মনে রাখো: ট্রান্সক্রিপ্ট ভুল হলে সেটা জরুরি বলে ভেবে ভুল করে অ্যালার্ম বাজাবে না।\n\n")
         }
         sb.append(GATEKEEPER_RULES)
         return sb.toString()
