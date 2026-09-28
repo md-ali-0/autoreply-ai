@@ -222,8 +222,32 @@ class MainActivity : AppCompatActivity() {
 
     // -------------------------------------------------------------- navigation
 
-    /** Guards the bottom-nav / pager feedback loop while we set one from the other. */
-    private var syncing = false
+    /**
+     * Guards the bottom-nav / pager feedback loop while we set one from the other.
+     *
+     * A plain Boolean is not enough here. The chain is
+     * `goToSection -> setSelectedItemId -> listener -> goToSection`, and the inner
+     * call runs `renderSectionChrome`, which clears the flag on its way out. That
+     * clears the *outer* call's flag too, so the guard is already down by the time
+     * the outer call sets `setCurrentItem` — and the recursion runs unchecked until
+     * the stack overflows. Five real crashes on 28 Sep, all with this frame:
+     *
+     *     goToSection -> setupNavigation$lambda$3 -> onNavigationItemSelected -> goToSection ...
+     *
+     * A depth counter is reentrancy-safe: the inner call increments and decrements
+     * symmetrically, so the flag is still up when control returns to the outer call.
+     */
+    private var syncingDepth = 0
+    private val syncing: Boolean get() = syncingDepth > 0
+
+    private inline fun guarded(block: () -> Unit) {
+        syncingDepth++
+        try {
+            block()
+        } finally {
+            syncingDepth--
+        }
+    }
 
     private fun setupNavigation() {
         adapter = TabsAdapter(this)
@@ -263,9 +287,7 @@ class MainActivity : AppCompatActivity() {
 
                     val menuId = SECTION_MENU_ID[section]
                     if (b.bottomNav.selectedItemId != menuId) {
-                        syncing = true
-                        b.bottomNav.selectedItemId = menuId
-                        syncing = false
+                        guarded { b.bottomNav.selectedItemId = menuId }
                     }
                 }
                 fragmentAt(position)?.onShown()
@@ -281,14 +303,16 @@ class MainActivity : AppCompatActivity() {
         val target = if (page < 0) first else page
 
         // Selecting a bottom-nav item invokes its listener synchronously, so the
-        // flag must be set across the call, not around the whole method.
+        // flag must be held across the call, not around the whole method.
         if (b.bottomNav.selectedItemId != SECTION_MENU_ID[section]) {
-            syncing = true
-            b.bottomNav.selectedItemId = SECTION_MENU_ID[section]
-            syncing = false
+            guarded { b.bottomNav.selectedItemId = SECTION_MENU_ID[section] }
         }
 
-        if (b.pager.currentItem != target) b.pager.setCurrentItem(target, false)
+        // setCurrentItem fires onPageSelected synchronously, which also drives the
+        // bottom nav — hold the guard across it for the same reason as above.
+        if (b.pager.currentItem != target) {
+            guarded { b.pager.setCurrentItem(target, false) }
+        }
         renderSectionChrome(section, target)
     }
 
@@ -297,21 +321,21 @@ class MainActivity : AppCompatActivity() {
         val first = TabsAdapter.SECTION_FIRST_PAGE[section]
         val count = TabsAdapter.SECTION_PAGES[section]
 
-        syncing = true
-        b.tabs.removeAllTabs()
-        if (count > 1) {
-            for (i in 0 until count) {
-                b.tabs.addTab(b.tabs.newTab().setText(TabsAdapter.TITLES[first + i]))
+        guarded {
+            b.tabs.removeAllTabs()
+            if (count > 1) {
+                for (i in 0 until count) {
+                    b.tabs.addTab(b.tabs.newTab().setText(TabsAdapter.TITLES[first + i]))
+                }
+                b.tabs.visibility = View.VISIBLE
+                b.tabDivider.visibility = View.VISIBLE
+                val index = (page - first).coerceIn(0, count - 1)
+                b.tabs.getTabAt(index)?.select()
+            } else {
+                b.tabs.visibility = View.GONE
+                b.tabDivider.visibility = View.GONE
             }
-            b.tabs.visibility = View.VISIBLE
-            b.tabDivider.visibility = View.VISIBLE
-            val index = (page - first).coerceIn(0, count - 1)
-            b.tabs.getTabAt(index)?.select()
-        } else {
-            b.tabs.visibility = View.GONE
-            b.tabDivider.visibility = View.GONE
         }
-        syncing = false
 
         // Home is read-only, so a Save button there would be a lie.
         b.saveBar.visibility = if (section == TabsAdapter.SECTION_HOME) View.GONE else View.VISIBLE
