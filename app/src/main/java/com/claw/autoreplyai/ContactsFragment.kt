@@ -23,11 +23,13 @@ class ContactsFragment : BaseSettingsFragment() {
     override fun onViewsReady() {
         b.switchOnlyContacts.setOnCheckedChangeListener { _, v -> prefs.onlyContacts = v }
         b.switchSkipGroups.setOnCheckedChangeListener { _, v -> prefs.skipGroups = v }
+        b.switchSkipUnknown.setOnCheckedChangeListener { _, v -> prefs.skipUnknown = v }
     }
 
     override fun load() {
         b.switchOnlyContacts.isChecked = prefs.onlyContacts
         b.switchSkipGroups.isChecked = prefs.skipGroups
+        b.switchSkipUnknown.isChecked = prefs.skipUnknown
         b.etContactList.setText(prefs.contactList)
         b.etNeverReply.setText(prefs.neverReply)
         b.etCountryCode.setText(prefs.countryCode)

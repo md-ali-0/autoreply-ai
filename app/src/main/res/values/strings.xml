@@ -41,6 +41,8 @@
     <string name="contact_list">কন্টাক্ট তালিকা (প্রতি লাইনে একটা নাম)</string>
     <string name="contact_hint">আজমি\nআম্মু</string>
     <string name="skip_groups">গ্রুপ চ্যাট বাদ দাও</string>
+    <string name="skip_unknown">অচেনা নাম্বারে রিপ্লাই দেবে না</string>
+    <string name="skip_unknown_sub">কন্টাক্টে সেভ করা নেই এমন নাম্বার থেকে মেসেজ এলে AI উত্তর দেবে না — আপনি নিজে দেখবেন। চালু রাখাই নিরাপদ।</string>
     <string name="country_code">ডিফল্ট কান্ট্রি কোড</string>
 
     <string name="hours_title">সময়সীমা</string>

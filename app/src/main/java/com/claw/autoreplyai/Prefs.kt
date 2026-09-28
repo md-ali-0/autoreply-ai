@@ -161,6 +161,16 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getBoolean("skipGroups", true)
         set(v) = sp.edit().putBoolean("skipGroups", v).apply()
 
+    /**
+     * Never auto-reply to a chat whose title is a bare phone number, i.e. somebody
+     * not saved in contacts. On by default: an unsaved number is exactly where an
+     * assistant speaking for you can do the most damage, and there is no context
+     * to judge it with.
+     */
+    var skipUnknown: Boolean
+        get() = sp.getBoolean("skipUnknown", true)
+        set(v) = sp.edit().putBoolean("skipUnknown", v).apply()
+
     var countryCode: String
         get() = sp.getString("countryCode", "880") ?: "880"
         set(v) = sp.edit().putString("countryCode", v.filter { c -> c.isDigit() }).apply()

@@ -76,6 +76,12 @@ object ReplyEngine {
             return
         }
 
+        if (p.skipUnknown && looksLikeNumber(sender)) {
+            log(app, "অচেনা নাম্বার — নিজে দেখুন — $sender")
+            digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
+            return
+        }
+
         if (p.hoursEnabled && !withinHours(p)) {
             log(app, "সময়সীমার বাইরে (${timeLabel(p.hourStart, p.hourStartMin)}–${timeLabel(p.hourEnd, p.hourEndMin)}) — $sender")
             digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
@@ -635,8 +641,18 @@ object ReplyEngine {
         }
     }
 
-    private fun isBlocked(p: Prefs, sender: String): Boolean {
-        val s = sender.lowercase()
+    /**
+     * True when a chat title is a phone number rather than a saved name — WhatsApp
+     * shows "+8801XXXXXXXXX" for anyone not in contacts.
+     */
+    private fun looksLikeNumber(sender: String): Boolean {
+        val digits = sender.count { it.isDigit() }
+        if (digits < 7) return false
+        // Allow the punctuation WhatsApp puts in a formatted number, and nothing else.
+        return sender.all { it.isDigit() || it in " +-()\u00a0" }
+    }
+
+    private fun isBlocked(p: Prefs, sender: String): Boolean {        val s = sender.lowercase()
         return p.neverReply
             .split('\n', ',', ';')
             .map { it.trim().lowercase() }
@@ -697,6 +713,11 @@ object ReplyEngine {
         }
 
         sb.append('\n').append(SHORT_RULE).append('\n')
+
+        // Always on, and deliberately not part of the user-editable safetyRule: an
+        // assistant that declares love or promises a phone call on the owner's
+        // behalf does real damage, and this must not be lost by editing a text box.
+        sb.append('\n').append(COMMITMENT_RULE).append('\n')
 
         if (fromVoice) {
             sb.append('\n').append(VOICE_NOTE_RULE).append('\n')
@@ -767,6 +788,40 @@ object ReplyEngine {
     """.trimIndent()
 
     /**
+     * The hard limits on speaking for Ali.
+     *
+     * Written after a real incident: an unsaved number asked "তুমি আমাকে কত ভালবাস?"
+     * and the bot answered "অনেক। বাসায় গিয়ে কল দিচ্ছি, তখন কথা হবে।" — declaring
+     * love and promising a phone call that Ali never agreed to make. A chat model
+     * has no idea which of those it is allowed to say, so it is told flatly.
+     */
+    private val COMMITMENT_RULE = """
+        ⛔ কখনো যা করা যাবে না (এর কোনো ব্যতিক্রম নেই):
+
+        ১. নিজের পক্ষ থেকে ভালোবাসা বা প্রেম প্রকাশ করবে না।
+           "ভালোবাসি", "অনেক ভালোবাসি", "তোমাকে ছাড়া পারি না", "তুমিই আমার সব" —
+           এ ধরনের একটি কথাও বলবে না, এমনকি কেউ জিজ্ঞেস করলেও।
+           কেউ "আমাকে কত ভালবাসো?" জাতীয় কিছু জিজ্ঞেস করলে উত্তর দেবে না —
+           ছোট করে বলবে: "এটা আমার নিজে বলা উচিত।" আর Ali-কে জানাবে।
+
+        ২. কোনো প্রতিশ্রুতি দেবে না। ফোন করা, বাসায় যাওয়া, দেখা করা, ঘুরতে যাওয়া,
+           টাকা বা কোনো কিছু দেওয়া — কিছুই করার কথা দেবে না।
+
+        ৩. কোনো সময়, তারিখ বা স্থান মেনে নেবে না। ("আজ রাতে আসবো", "কাল দেখা হবে",
+           "এখন বের হচ্ছি" — এগুলো কখনো নয়।)
+
+        ৪. সম্পর্ক, বিয়ে বা ভবিষ্যৎ নিয়ে কোনো কথা দেবে না।
+
+        ৫. কারো সম্পর্কে এমন কিছু বলবে না যা তুমি জানো না। অনুমান করে কোনো
+           ঘটনা, সিদ্ধান্ত বা মত তৈরি করবে না।
+
+        কেউ এসব চাইলে বা জিজ্ঞেস করলে কী করবে:
+        - ছোট, ভদ্র, অস্পষ্ট উত্তর দাও — যেমন "এটা আমার নিজে বলা উচিত, পরে বলবো।"
+        - কোনো কারণ বানিয়ে বলবে না, মিথ্যা বলবে না, বাড়িয়ে বলবে না
+        - সাথে সাথে Ali-কে জানাও, যাতে সে নিজে উত্তর দিতে পারে
+    """.trimIndent()
+
+    /**
      * Real people text in fragments, not paragraphs. A model left to itself writes
      * polite full sentences, which reads like a customer-service bot.
      */
@@ -819,8 +874,16 @@ object ReplyEngine {
         - "hold"   = খুব ব্যক্তিগত, আবেগপূর্ণ, দুঃখের বা গুরুত্বপূর্ণ মেসেজ।
           এগুলোর উত্তর একটা বটের দেওয়া উচিত নয় — মানুষকে নিজে দিতে হবে
           (মন খারাপ, কান্না, অভিমান, সংসার নিয়ে সংকট, বড় কোনো সিদ্ধান্ত)
-          তবে খেয়াল রাখো: সাধারণ রোমান্টিক, আদুরে, খুনসুটি বা ফ্লার্টি কথাবার্তা
-          hold নয় — সেগুলোর উত্তর দেবে "normal" দিয়ে।
+
+          হালকা খুনসুটি বা রসিকতা hold নয় — সেগুলোর উত্তর দেবে "normal" দিয়ে।
+
+          ⚠️ কিন্তু নিচের যেকোনো একটা থাকলে উত্তর "hold" হবেই — "normal" নয়:
+          • ভালোবাসা, প্রেম বা সম্পর্ক নিয়ে সরাসরি কথা
+            (যেমন: "তুমি আমাকে কত ভালবাসো?", "আমাকে ভালোবাসো?", "তুমি কার সাথে আছো?")
+          • কোনো কিছু করার দাবি বা প্রতিশ্রুতি চাওয়া
+            (যেমন: "আমার সাথে দেখা করতে আসবে?", "আজ আসবে?", "কল দেবে?", "টাকা দেবে?")
+          • কেউ কষ্টে আছে, কাঁদছে, অভিমান করছে, বা সম্পর্ক ভাঙার কথা বলছে
+          • বিয়ে, ভবিষ্যৎ বা সংসার নিয়ে প্রশ্ন
 
         style:
         - "tiny"    = শুধু খালি সমর্থনসূচক কথা, যেখানে উত্তর দেওয়ার কিছু নেই।
