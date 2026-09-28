@@ -70,6 +70,37 @@ class MainActivity : AppCompatActivity() {
         if (intent?.getBooleanExtra(EXTRA_CLOUDTEST, false) == true) {
             runCloudCheck()
         }
+        if (intent?.getBooleanExtra(EXTRA_NAVTEST, false) == true) {
+            // After layout: switching sections drives the pager and the nav bar, and
+            // both need real views to talk to.
+            b.root.post { runNavCheck() }
+        }
+    }
+
+    /**
+     * Walks every section in turn. This is the exact path that recursed until the
+     * stack overflowed, so a headless run is a real regression test for it.
+     */
+    private fun runNavCheck() {
+        for (section in 0 until TabsAdapter.SECTION_COUNT) {
+            try {
+                goToSection(section)
+                LogStore.add(this, "নেভ টেস্ট: section $section → ঠিক আছে")
+            } catch (t: Throwable) {
+                LogStore.add(this, "নেভ টেস্ট: section $section → ব্যর্থ: ${t.javaClass.simpleName}")
+            }
+        }
+        // ...and once more from the end, to catch a loop that only closes on the
+        // second pass through the same section.
+        for (section in TabsAdapter.SECTION_COUNT - 1 downTo 0) {
+            try {
+                goToSection(section)
+            } catch (t: Throwable) {
+                LogStore.add(this, "নেভ টেস্ট (উল্টো): $section → ব্যর্থ: ${t.javaClass.simpleName}")
+                return
+            }
+        }
+        LogStore.add(this, "নেভ টেস্ট: সব সেকশন ✓")
     }
 
     /** Headless cloud-backup check: uploads the current snapshot and logs the result. */
@@ -142,6 +173,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_AITEST = "aitest"
         const val EXTRA_VOICETEST = "voicetest"
         const val EXTRA_CLOUDTEST = "cloudtest"
+        const val EXTRA_NAVTEST = "navtest"
 
         /** Bottom-navigation menu id for each section, indexed by section. */
         val SECTION_MENU_ID = intArrayOf(
@@ -193,6 +225,12 @@ class MainActivity : AppCompatActivity() {
         b.pager.offscreenPageLimit = 1
 
         b.bottomNav.setOnItemSelectedListener { item ->
+            // `setSelectedItemId` fires this listener synchronously, so without the
+            // guard goToSection -> select -> listener -> goToSection recurses until
+            // the stack overflows.
+            if (syncing) {
+                return@setOnItemSelectedListener true
+            }
             goToSection(menuIdToSection(item.itemId))
             true
         }
@@ -236,11 +274,14 @@ class MainActivity : AppCompatActivity() {
         val first = TabsAdapter.SECTION_FIRST_PAGE[section]
         val target = if (page < 0) first else page
 
+        // Selecting a bottom-nav item invokes its listener synchronously, so the
+        // flag must be set across the call, not around the whole method.
         if (b.bottomNav.selectedItemId != SECTION_MENU_ID[section]) {
             syncing = true
             b.bottomNav.selectedItemId = SECTION_MENU_ID[section]
             syncing = false
         }
+
         if (b.pager.currentItem != target) b.pager.setCurrentItem(target, false)
         renderSectionChrome(section, target)
     }
