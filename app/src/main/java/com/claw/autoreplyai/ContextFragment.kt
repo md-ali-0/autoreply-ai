@@ -7,10 +7,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import com.claw.autoreplyai.databinding.FragmentContextBinding
 import com.claw.autoreplyai.databinding.ItemContextRowBinding
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Per-contact background notes, the confidentiality rule, per-contact memory
@@ -62,12 +69,67 @@ class ContextFragment : BaseSettingsFragment() {
         b.btnImport.setOnClickListener {
             importLauncher.launch(arrayOf("application/json"))
         }
+
+        b.switchCloudAuto.setOnCheckedChangeListener { _, v -> prefs.cloudAutoUpload = v }
+        b.btnCloudUpload.setOnClickListener { runCloud(upload = true) }
+        b.btnCloudDownload.setOnClickListener { runCloud(upload = false) }
+    }
+
+    /**
+     * Both cloud calls block on the network, so they run off the main thread and
+     * report through the status line rather than a toast that disappears.
+     */
+    private fun runCloud(upload: Boolean) {
+        save() // the endpoint and token are edited on this tab
+        val ctx = requireContext()
+
+        if (!prefs.cloudConfigured()) {
+            b.tvCloudStatus.text = getString(R.string.cloud_missing)
+            return
+        }
+
+        b.btnCloudUpload.isEnabled = false
+        b.btnCloudDownload.isEnabled = false
+        b.tvCloudStatus.text = getString(if (upload) R.string.cloud_uploading else R.string.cloud_downloading)
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                if (upload) CloudBackup.upload(ctx) else CloudBackup.download(ctx)
+            }
+
+            if (!isAdded) return@launch
+            b.btnCloudUpload.isEnabled = true
+            b.btnCloudDownload.isEnabled = true
+            b.tvCloudStatus.text = outcome.message
+            toast(outcome.message.lineSequence().first())
+
+            if (outcome.ok) {
+                // A restore replaces everything the other tabs are showing.
+                if (!upload) (activity as? MainActivity)?.reloadAllTabs()
+                refreshCloudStatus()
+            }
+        }
+    }
+
+    private fun refreshCloudStatus() {
+        val at = prefs.cloudLastUpload
+        val when_ = if (at <= 0L) {
+            getString(R.string.cloud_never)
+        } else {
+            SimpleDateFormat("dd MMM, hh:mm a", Locale.US).format(Date(at))
+        }
+        b.tvCloudStatus.text = getString(R.string.cloud_last, when_)
     }
 
     override fun load() {
         b.etAssistantName.setText(prefs.assistantName)
         b.etMoodText.setText(prefs.moodText)
         b.etSafety.setText(prefs.safetyRule)
+
+        b.etCloudUrl.setText(prefs.cloudUrl)
+        b.etCloudToken.setText(prefs.cloudToken)
+        b.switchCloudAuto.isChecked = prefs.cloudAutoUpload
+        refreshCloudStatus()
 
         rows.clear()
         b.ctxContainer.removeAllViews()
@@ -89,6 +151,9 @@ class ContextFragment : BaseSettingsFragment() {
             .ifBlank { "ঘুমাচ্ছে" }
         prefs.safetyRule = b.etSafety.text?.toString().orEmpty()
             .ifBlank { Prefs.DEFAULT_SAFETY }
+
+        prefs.cloudUrl = b.etCloudUrl.text?.toString().orEmpty()
+        prefs.cloudToken = b.etCloudToken.text?.toString().orEmpty()
 
         ContactContext.save(
             requireContext(),

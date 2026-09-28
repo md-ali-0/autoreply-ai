@@ -28,7 +28,12 @@ object Backup {
 
         val arr = JSONArray()
         for (e in ContactContext.all(ctx)) {
-            arr.put(JSONObject().put("name", e.name).put("context", e.context))
+            arr.put(
+                JSONObject()
+                    .put("name", e.name)
+                    .put("context", e.context)
+                    .put("close", e.close)
+            )
         }
         root.put("contexts", arr)
         root.put("memory", ChatMemory.snapshot(ctx))
@@ -64,7 +69,9 @@ object Backup {
                 val name = o.optString("name").trim()
                 val body = o.optString("context").trim()
                 if (name.isNotEmpty() || body.isNotEmpty()) {
-                    list.add(ContactContext.Entry(name, body))
+                    // `close` is absent in snapshots written before it existed, so it
+                    // defaults to false rather than failing the whole restore.
+                    list.add(ContactContext.Entry(name, body, o.optBoolean("close", false)))
                 }
             }
             ContactContext.save(ctx, list)

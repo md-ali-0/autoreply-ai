@@ -185,6 +185,21 @@
     <string name="clear_memory">মেমোরি মুছুন</string>
     <string name="memory_count">মনে আছে %1$d টা মেসেজ</string>
 
+    <!-- ===== cloud backup ===== -->
+    <string name="cloud_label">অনলাইন ব্যাকআপ</string>
+    <string name="cloud_sub">সেটিংস, কন্টাক্ট কন্টেক্সট আর চ্যাট মেমোরি আপনার নিজের সার্ভারে জমা থাকবে। ফোন হারালে বা নতুন ফোনে এই টোকেন দিলেই সব ফিরে আসবে।</string>
+    <string name="cloud_url">সার্ভারের ঠিকানা</string>
+    <string name="cloud_token">ডিভাইস টোকেন</string>
+    <string name="cloud_upload">এখনই আপলোড</string>
+    <string name="cloud_download">ফিরিয়ে আনুন</string>
+    <string name="cloud_auto">নিজে থেকে আপলোড করবে</string>
+    <string name="cloud_auto_sub">দিনে একবার নিজে থেকেই ব্যাকআপ পাঠাবে। টোকেন না দিলে কিছুই যাবে না।</string>
+    <string name="cloud_last">শেষ আপলোড: %1$s</string>
+    <string name="cloud_never">এখনো হয়নি</string>
+    <string name="cloud_missing">সার্ভারের ঠিকানা আর টোকেন দুটোই দিতে হবে</string>
+    <string name="cloud_uploading">আপলোড হচ্ছে…</string>
+    <string name="cloud_downloading">সার্ভার থেকে আনা হচ্ছে…</string>
+
 
 
 </resources>

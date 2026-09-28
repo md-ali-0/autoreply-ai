@@ -283,6 +283,30 @@ class Prefs private constructor(ctx: Context) {
         sp.edit().putLong("last_" + contact.lowercase(), at).apply()
     }
 
+    // ------------------------------------------------------------ cloud backup
+
+    /** Base URL of the backup API, without a trailing slash. */
+    var cloudUrl: String
+        get() = sp.getString("cloudUrl", "https://md-ali.dev/api/v1") ?: ""
+        set(v) = sp.edit().putString("cloudUrl", v.trim().trimEnd('/')).apply()
+
+    /** Device token issued from the admin panel. */
+    var cloudToken: String
+        get() = sp.getString("cloudToken", "") ?: ""
+        set(v) = sp.edit().putString("cloudToken", v.trim()).apply()
+
+    /** Upload a snapshot automatically once a day. */
+    var cloudAutoUpload: Boolean
+        get() = sp.getBoolean("cloudAutoUpload", true)
+        set(v) = sp.edit().putBoolean("cloudAutoUpload", v).apply()
+
+    /** When the last successful upload happened. */
+    var cloudLastUpload: Long
+        get() = sp.getLong("cloudLastUpload", 0L)
+        set(v) = sp.edit().putLong("cloudLastUpload", v).apply()
+
+    fun cloudConfigured(): Boolean = cloudUrl.isNotBlank() && cloudToken.isNotBlank()
+
     // ------------------------------------------------------------ backup
 
     /** Every stored setting, so a backup never silently misses a new key. */

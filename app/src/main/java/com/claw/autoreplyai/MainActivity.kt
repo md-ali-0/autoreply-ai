@@ -62,6 +62,23 @@ class MainActivity : AppCompatActivity() {
         if (intent?.getBooleanExtra(EXTRA_VOICETEST, false) == true) {
             runVoiceCheck()
         }
+        if (intent?.getBooleanExtra(EXTRA_CLOUDTEST, false) == true) {
+            runCloudCheck()
+        }
+    }
+
+    /** Headless cloud-backup check: uploads the current snapshot and logs the result. */
+    private fun runCloudCheck() {
+        val p = Prefs.get(this)
+        LogStore.add(this, "ক্লাউড টেস্ট: ${p.cloudUrl} · টোকেন ${if (p.cloudToken.isBlank()) "নেই" else "আছে"}")
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            val up = CloudBackup.upload(this@MainActivity)
+            LogStore.add(this@MainActivity, "ক্লাউড আপলোড: ${if (up.ok) "✓" else "✗"} ${up.message}")
+            if (up.ok) {
+                val down = CloudBackup.download(this@MainActivity)
+                LogStore.add(this@MainActivity, "ক্লাউড ডাউনলোড: ${if (down.ok) "✓" else "✗"} ${down.message}")
+            }
+        }
     }
 
     /**
@@ -119,6 +136,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_NOTIFTEST = "notiftest"
         const val EXTRA_AITEST = "aitest"
         const val EXTRA_VOICETEST = "voicetest"
+        const val EXTRA_CLOUDTEST = "cloudtest"
     }
 
     override fun onResume() {
