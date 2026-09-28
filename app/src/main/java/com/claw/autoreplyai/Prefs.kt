@@ -88,6 +88,14 @@ class Prefs private constructor(ctx: Context) {
         set(v) = sp.edit().putString("transcribeModel", v.trim()).apply()
 
     /**
+     * Let a vision model look at incoming photos instead of answering "[Photo]".
+     * Needs the all-files permission and a vision-capable chat model.
+     */
+    var understandPhotos: Boolean
+        get() = sp.getBoolean("understandPhotos", true)
+        set(v) = sp.edit().putBoolean("understandPhotos", v).apply()
+
+    /**
      * Optional dedicated endpoint for transcription. Most cheap chat gateways do
      * not implement `/audio/transcriptions` at all (they answer 404), so voice notes
      * need somewhere else to go — e.g. Groq (`https://api.groq.com/openai/v1`) or
@@ -103,12 +111,21 @@ class Prefs private constructor(ctx: Context) {
         set(v) = sp.edit().putString("transcribeApiKey", v.trim()).apply()
 
     /**
-     * ISO-639-1 hint for the transcriber. Without it Whisper guesses, and on short
-     * Bengali clips it guesses badly — the same voice note came back as Spanish,
-     * Turkish and Bengali script across attempts. `bn` anchors it. Blank = auto.
+     * ISO-639-1 hint for the transcriber, or blank to let Whisper detect it.
+     *
+     * Blank is the better default, and that was not obvious: forcing `bn` looked
+     * right until real clips were compared. This contact mixes Bangla and English,
+     * and auto-detection scored better or equal on every clip tested —
+     *
+     *   Bangla clip : auto "Yes, how are you? Good, how are you?"  (translated, correct)
+     *                 bn   "জিভাই কোমন আছেন ভালো আছেন"                (correct)
+     *   English clip: auto "Hello, Alibhai, how are you?"           (correct)
+     *                 bn   "হলো আলি বাই হার যো হাউ কেন আই হলো"        (garbage)
+     *
+     * Forcing a language can only ever be right for one of them.
      */
     var transcribeLanguage: String
-        get() = sp.getString("transcribeLanguage", "bn") ?: "bn"
+        get() = sp.getString("transcribeLanguage", "") ?: ""
         set(v) = sp.edit().putString("transcribeLanguage", v.trim()).apply()
 
     // ---------- language ----------

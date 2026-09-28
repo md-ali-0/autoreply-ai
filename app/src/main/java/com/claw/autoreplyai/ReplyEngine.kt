@@ -197,16 +197,30 @@ object ReplyEngine {
         val text = incoming.text
         if (text.isBlank()) return
 
+        // What the model sees is an instruction for a photo, which would read
+        // strangely in the history, the digest and the log. Keep a short label for
+        // those, and send the real thing to the model.
+        val display = if (incoming.imageBase64 != null) "[ছবি]" else text
+        val fromPhoto = incoming.imageBase64 != null
+
         if (p.moodEnabled) {
-            handleMood(app, p, pkg, sender, text, phoneHint, direct, contentIntent, incoming.fromVoice)
+            handleMood(
+                app, p, pkg, sender, display, phoneHint, direct, contentIntent,
+                incoming.fromVoice, incoming.imageBase64
+            )
             return
         }
 
         val messages = ArrayList<AiClient.Msg>()
         val contactContext = ContactContext.forContact(app, sender)
-        messages.add(AiClient.Msg("system", buildSystemPrompt(p, sender, contactContext, incoming.fromVoice)))
+        messages.add(
+            AiClient.Msg(
+                "system",
+                buildSystemPrompt(p, sender, contactContext, incoming.fromVoice, fromPhoto)
+            )
+        )
         messages.addAll(trimmedHistory(app, sender))
-        messages.add(AiClient.Msg("user", text))
+        messages.add(AiClient.Msg("user", text, incoming.imageBase64))
 
         val raw = try {
             askAi(app, messages)
@@ -222,24 +236,24 @@ object ReplyEngine {
         }
 
         val decision = if (p.smartTriage) ReplyDecision.parse(raw) else ReplyDecision.plain(raw)
-        val preview = text.replace("\n", " ").take(70)
+        val preview = display.replace("\n", " ").take(70)
 
         when (decision.action) {
             ReplyDecision.Action.IGNORE -> {
                 log(app, "উত্তর দেওয়া হলো না (দরকার নেই) — $sender: $preview")
                 // Record it anyway: a history with holes is what makes the next
                 // reply look like it came out of nowhere.
-                ChatMemory.add(app, sender, "user", text)
-                digest(app, pkg, sender, text, DigestStore.ACTION_IGNORED, "")
+                ChatMemory.add(app, sender, "user", display)
+                digest(app, pkg, sender, display, DigestStore.ACTION_IGNORED, "")
                 return
             }
 
             ReplyDecision.Action.HOLD -> {
                 if (p.holdOnEmotional) {
                     log(app, "⚠️ নিজে উত্তর দিন — $sender: $preview")
-                    ChatMemory.add(app, sender, "user", text)
-                    Notify.needsYou(app, sender, text)
-                    digest(app, pkg, sender, text, DigestStore.ACTION_HELD, "")
+                    ChatMemory.add(app, sender, "user", display)
+                    Notify.needsYou(app, sender, display)
+                    digest(app, pkg, sender, display, DigestStore.ACTION_HELD, "")
                     return
                 }
                 log(app, "আবেগপূর্ণ মেসেজ, তবে সেটিং অনুযায়ী উত্তর দেওয়া হচ্ছে — $sender")
@@ -262,16 +276,24 @@ object ReplyEngine {
         val waitMs = p.replyDelayMs(quick)
         if (waitMs > 0) delay(waitMs)
 
-        deliverReply(app, p, pkg, sender, text, finalText, reply, contactContext.length, phoneHint, direct, contentIntent)
+        deliverReply(app, p, pkg, sender, display, finalText, reply, contactContext.length, phoneHint, direct, contentIntent)
     }
 
-    /** An incoming message, plus whether it came from a (possibly imperfect) transcript. */
-    private data class Incoming(val text: String, val fromVoice: Boolean)
+    /**
+     * An incoming message, plus whether it came from a (possibly imperfect)
+     * transcript, and the photo behind it when there is one.
+     */
+    private data class Incoming(
+        val text: String,
+        val fromVoice: Boolean,
+        val imageBase64: String? = null
+    )
 
     /**
-     * Replaces a voice-note placeholder with its transcript. Returns blank text
-     * when the note cannot be read — a reply to the words "Voice message" helps
-     * nobody, so the message is skipped and the reason is logged instead.
+     * Replaces a voice-note or photo placeholder with something the model can use.
+     * Returns blank text when the media cannot be read — a reply to the words
+     * "Voice message" or "Photo" helps nobody, so the message is skipped and the
+     * reason is logged instead.
      */
     private fun resolveIncomingText(
         app: Context,
@@ -280,24 +302,40 @@ object ReplyEngine {
         sender: String,
         message: String
     ): Incoming {
-        if (!p.transcribeVoice) return Incoming(message, fromVoice = false)
-        if (!VoiceTranscriber.looksLikeVoiceNote(message)) return Incoming(message, fromVoice = false)
-
-        if (!MessagingApps.canTranscribeVoice(pkg)) {
-            log(app, "ভয়েস মেসেজ — ${MessagingApps.label(pkg)}-এর অডিও পড়া যায় না, তাই উত্তর দেওয়া হচ্ছে না — $sender")
-            digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
-            return Incoming("", fromVoice = true)
+        // ---- voice note ----
+        if (p.transcribeVoice && VoiceTranscriber.looksLikeVoiceNote(message)) {
+            if (!MessagingApps.canTranscribeVoice(pkg)) {
+                log(app, "ভয়েস মেসেজ — ${MessagingApps.label(pkg)}-এর অডিও পড়া যায় না, তাই উত্তর দেওয়া হচ্ছে না — $sender")
+                digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
+                return Incoming("", fromVoice = true)
+            }
+            log(app, "ভয়েস মেসেজ পেয়েছি — ট্রান্সক্রিপ্ট করছি — $sender")
+            val transcript = VoiceTranscriber.transcribe(app, p, pkg)
+            if (transcript.isNullOrBlank()) {
+                log(app, "ভয়েস মেসেজ পড়া গেল না — $sender")
+                digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
+                return Incoming("", fromVoice = true)
+            }
+            log(app, "ভয়েস ট্রান্সক্রিপ্ট ($sender): ${transcript.take(90)}")
+            return Incoming(transcript, fromVoice = true)
         }
 
-        log(app, "ভয়েস মেসেজ পেয়েছি — ট্রান্সক্রিপ্ট করছি — $sender")
-        val transcript = VoiceTranscriber.transcribe(app, p, pkg)
-        if (transcript.isNullOrBlank()) {
-            log(app, "ভয়েস মেসেজ পড়া গেল না — $sender")
-            digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
-            return Incoming("", fromVoice = true)
+        // ---- photo ----
+        if (p.understandPhotos && ImageReader.looksLikePhoto(message)) {
+            val img = ImageReader.loadLatestBase64(app)
+            if (img == null) {
+                log(app, "ছবি এসেছে কিন্তু পড়া গেল না — $sender (সব-ফাইল অনুমতি আছে?)")
+                digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
+                return Incoming("", fromVoice = false)
+            }
+            // The model needs words alongside the picture: what arrived, and what is
+            // being asked of it.
+            val prompt = "কন্টাক্ট একটি ছবি পাঠিয়েছে। ছবিটা দেখে স্বাভাবিকভাবে ছোট উত্তর দাও। " +
+                    "ছবিতে কী আছে সেটা নিয়ে নিশ্চিত না হলে কিছু বানিয়ে বলবে না।"
+            return Incoming(prompt, fromVoice = false, imageBase64 = img)
         }
-        log(app, "ভয়েস ট্রান্সক্রিপ্ট ($sender): ${transcript.take(90)}")
-        return Incoming(transcript, fromVoice = true)
+
+        return Incoming(message, fromVoice = false)
     }
 
     /**
@@ -355,12 +393,18 @@ object ReplyEngine {
         phoneHint: String?,
         direct: DirectReplier.Handle?,
         contentIntent: PendingIntent?,
-        fromVoice: Boolean = false
+        fromVoice: Boolean = false,
+        imageBase64: String? = null
     ) {
         val messages = ArrayList<AiClient.Msg>()
-        messages.add(AiClient.Msg("system", buildGatekeeperPrompt(p, sender, fromVoice)))
+        messages.add(
+            AiClient.Msg(
+                "system",
+                buildGatekeeperPrompt(p, sender, fromVoice, imageBase64 != null)
+            )
+        )
         messages.addAll(trimmedHistory(app, sender))
-        messages.add(AiClient.Msg("user", message))
+        messages.add(AiClient.Msg("user", message, imageBase64))
 
         val raw = try {
             askAi(app, messages)
@@ -586,7 +630,8 @@ object ReplyEngine {
         p: Prefs,
         sender: String,
         contactContext: String,
-        fromVoice: Boolean = false
+        fromVoice: Boolean = false,
+        fromPhoto: Boolean = false
     ): String {
         val sb = StringBuilder()
         sb.append(p.persona.trim()).append("\n\n")
@@ -640,6 +685,10 @@ object ReplyEngine {
             sb.append('\n').append(VOICE_NOTE_RULE).append('\n')
         }
 
+        if (fromPhoto) {
+            sb.append('\n').append(PHOTO_RULE).append('\n')
+        }
+
         sb.append('\n')
         sb.append(if (p.smartTriage) TRIAGE_RULES else PLAIN_RULES)
         return sb.toString()
@@ -662,6 +711,9 @@ object ReplyEngine {
           অথবা ভদ্রভাবে বলো ঠিক বুঝতে পারোনি, একবার আবার বলতে
         - অনুমান করে কোনো তথ্য, নাম বা প্রতিশ্রুতি বানিয়ে বলবে না
         - নিশ্চিত না হলে প্রশ্ন করে জিজ্ঞেস করো, নিজে থেকে মন্তব্য করো না
+        - ট্রান্সক্রিপ্ট কখনো অন্য ভাষায় লেখা থাকতে পারে (বাংলা কথা ইংরেজি অক্ষরে
+          বা ইংরেজিতে অনূদিত)। উত্তর দেবে কন্টাক্ট সাধারণত যে ভাষায় লেখে সেই ভাষায়,
+          ট্রান্সক্রিপ্টের ভাষায় নয়।
     """.trimIndent()
 
     /**
@@ -709,6 +761,21 @@ object ReplyEngine {
         - কাউকে অভিবাদন জানাতে বা হালকা কিছু বলতে ২-৫ শব্দই যথেষ্ট
         - প্রশ্ন করলে শুধু উত্তর দাও, তার সাথে অতিরিক্ত ব্যাখ্যা বা সান্ত্বনা যোগ করো না
         - সত্যিই অনেক কিছু বলার থাকলে তবেই লম্বা হবে — কারণ থাকতে হবে
+    """.trimIndent()
+
+    /**
+     * Photos arrive as an image with a short instruction, so the model needs to be
+     * told what to do with it — and, more importantly, what not to do.
+     */
+    private val PHOTO_RULE = """
+        এই মেসেজের সাথে একটা ছবি আছে — কন্টাক্ট ছবি পাঠিয়েছে।
+
+        নিয়ম:
+        - ছবিতে কী আছে বুঝে স্বাভাবিকভাবে ছোট উত্তর দাও, ১-২ বাক্য
+        - ছবিতে যা স্পষ্ট দেখা যায় না, অনুমান করে বলবে না
+        - ছবিতে ব্যক্তিগত, সংবেদনশীল বা আপত্তিকর কিছু থাকলে সেটা নিয়ে মন্তব্য করবে না
+        - ছবিতে লেখা থাকলে পড়ে বুঝে তার প্রসঙ্গে উত্তর দাও
+        - "ছবি পেয়েছি" জাতীয় ফাঁকা কথা লিখবে না — ছবির বিষয় নিয়ে কথা বলো
     """.trimIndent()
 
     /**
@@ -773,7 +840,12 @@ object ReplyEngine {
 
     // ----------------------------------------------------- sleeping mode
 
-    private fun buildGatekeeperPrompt(p: Prefs, sender: String, fromVoice: Boolean = false): String {
+    private fun buildGatekeeperPrompt(
+        p: Prefs,
+        sender: String,
+        fromVoice: Boolean = false,
+        fromPhoto: Boolean = false
+    ): String {
         val sb = StringBuilder()
         sb.append("তুমি ").append(p.assistantName).append("। Ali-র assistant।\n")
         sb.append("Ali এখন ").append(p.moodText).append("।\n")
@@ -790,6 +862,9 @@ object ReplyEngine {
         if (fromVoice) {
             sb.append(VOICE_NOTE_RULE).append("\n\n")
             sb.append("⚠️ মনে রাখো: ট্রান্সক্রিপ্ট ভুল হলে সেটা জরুরি বলে ভেবে ভুল করে অ্যালার্ম বাজাবে না।\n\n")
+        }
+        if (fromPhoto) {
+            sb.append(PHOTO_RULE).append("\n\n")
         }
         sb.append(GATEKEEPER_RULES)
         return sb.toString()

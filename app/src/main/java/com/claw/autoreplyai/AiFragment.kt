@@ -39,6 +39,7 @@ class AiFragment : BaseSettingsFragment() {
         b.switchHold.setOnCheckedChangeListener { _, v -> prefs.holdOnEmotional = v }
         b.switchFailAlert.setOnCheckedChangeListener { _, v -> prefs.failAlert = v }
         b.switchTranscribe.setOnCheckedChangeListener { _, v -> prefs.transcribeVoice = v }
+        b.switchPhotos.setOnCheckedChangeListener { _, v -> prefs.understandPhotos = v }
         b.switchAutoLanguage.setOnCheckedChangeListener { _, v -> prefs.autoLanguage = v }
         b.switchRegister.setOnCheckedChangeListener { _, v -> prefs.mirrorRegister = v }
         b.switchApproval.setOnCheckedChangeListener { _, v -> prefs.approvalMode = v }
@@ -64,6 +65,7 @@ class AiFragment : BaseSettingsFragment() {
         b.switchHold.isChecked = prefs.holdOnEmotional
         b.switchFailAlert.isChecked = prefs.failAlert
         b.switchTranscribe.isChecked = prefs.transcribeVoice
+        b.switchPhotos.isChecked = prefs.understandPhotos
         b.switchAutoLanguage.isChecked = prefs.autoLanguage
         b.switchRegister.isChecked = prefs.mirrorRegister
         b.switchApproval.isChecked = prefs.approvalMode
@@ -103,7 +105,7 @@ class AiFragment : BaseSettingsFragment() {
 
         prefs.persona = b.etPersona.text?.toString().orEmpty().ifBlank { Prefs.DEFAULT_PERSONA }
         prefs.transcribeModel = b.etTranscribeModel.text?.toString().orEmpty().ifBlank { "whisper-1" }
-        prefs.transcribeLanguage = b.etTranscribeLanguage.text?.toString().orEmpty().ifBlank { "bn" }
+        prefs.transcribeLanguage = b.etTranscribeLanguage.text?.toString().orEmpty()
         prefs.transcribeBaseUrl = b.etTranscribeBase.text?.toString().orEmpty()
         prefs.transcribeApiKey = b.etTranscribeKey.text?.toString().orEmpty()
     }

@@ -39,6 +39,7 @@ class LogsFragment : BaseSettingsFragment() {
             WhatsAppNotificationListener.probe(requireContext())
             ReplySelfTest.run(requireContext())
             VoiceTranscriber.diagnose(requireContext())
+            ImageReader.diagnose(requireContext())
             refresh()
         }
     }

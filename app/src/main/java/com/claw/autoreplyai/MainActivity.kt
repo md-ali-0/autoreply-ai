@@ -71,6 +71,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun runVoiceCheck() {
         VoiceTranscriber.diagnose(this)
+        ImageReader.diagnose(this)
         val p = Prefs.get(this)
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             LogStore.add(
@@ -83,6 +84,13 @@ class MainActivity : AppCompatActivity() {
                 this@MainActivity,
                 if (out.isNullOrBlank()) "ভয়েস টেস্ট: ব্যর্থ ✗"
                 else "ভয়েস টেস্ট: সফল ✓ — ${out.take(200)}"
+            )
+
+            val img = ImageReader.loadLatestBase64(this@MainActivity, ignoreFreshness = true)
+            LogStore.add(
+                this@MainActivity,
+                if (img == null) "ছবি টেস্ট: কোনো ছবি পাওয়া যায়নি ✗"
+                else "ছবি টেস্ট: সফল ✓ (base64 ${img.length / 1024}KB)"
             )
         }
     }

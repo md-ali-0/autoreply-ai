@@ -16,7 +16,15 @@ import java.util.concurrent.TimeUnit
  */
 object AiClient {
 
-    data class Msg(val role: String, val content: String)
+    /**
+     * One chat message. [imageBase64] turns it into a multimodal message — the
+     * OpenAI content-parts shape, which is what every vision gateway accepts.
+     */
+    data class Msg(
+        val role: String,
+        val content: String,
+        val imageBase64: String? = null
+    )
 
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -33,7 +41,26 @@ object AiClient {
 
         val arr = JSONArray()
         for (m in messages) {
-            arr.put(JSONObject().put("role", m.role).put("content", m.content))
+            val o = JSONObject().put("role", m.role)
+            val img = m.imageBase64
+            if (img.isNullOrBlank()) {
+                o.put("content", m.content)
+            } else {
+                // "low" detail: a fixed ~85 tokens instead of up to ~1500. Plenty for
+                // "what is this and does it need an answer".
+                val parts = JSONArray()
+                parts.put(JSONObject().put("type", "text").put("text", m.content))
+                parts.put(
+                    JSONObject().put("type", "image_url").put(
+                        "image_url",
+                        JSONObject()
+                            .put("url", "data:image/jpeg;base64,$img")
+                            .put("detail", "low")
+                    )
+                )
+                o.put("content", parts)
+            }
+            arr.put(o)
         }
         val payload = JSONObject()
             .put("model", model)
