@@ -295,7 +295,7 @@ object ReplyEngine {
      * "Voice message" or "Photo" helps nobody, so the message is skipped and the
      * reason is logged instead.
      */
-    private fun resolveIncomingText(
+    private suspend fun resolveIncomingText(
         app: Context,
         p: Prefs,
         pkg: String,
@@ -322,9 +322,22 @@ object ReplyEngine {
 
         // ---- photo ----
         if (p.understandPhotos && ImageReader.looksLikePhoto(message)) {
-            val img = ImageReader.loadLatestBase64(app)
+            // WhatsApp posts the notification and writes the file in parallel, so a
+            // single immediate look can race the download. Give it a moment.
+            var img = ImageReader.loadLatestBase64(app)
             if (img == null) {
-                log(app, "ছবি এসেছে কিন্তু পড়া গেল না — $sender (সব-ফাইল অনুমতি আছে?)")
+                delay(2_500L)
+                img = ImageReader.loadLatestBase64(app)
+            }
+            if (img == null) {
+                // Almost always one of two things: WhatsApp's "Media auto-download"
+                // is off for photos, so nothing ever reaches disk, or the photo is
+                // older than the freshness window.
+                log(
+                    app,
+                    "ছবি পড়া গেল না — $sender। WhatsApp-এ Media auto-download চালু আছে কি? " +
+                            "(WhatsApp → Settings → Storage and data → Media auto-download → Photos)"
+                )
                 digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
                 return Incoming("", fromVoice = false)
             }
