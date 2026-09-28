@@ -158,12 +158,38 @@ object AiProviderStore {
         }
 
         // 1. Read every profile and collect any legacy plaintext keys in the same pass.
+        //
+        //    A profile written before `id` existed has none, and [AiProvider.fromJson]
+        //    mints one. That minted id MUST be written back before anything is stored
+        //    under it, or the identity changes on the next read and the key becomes
+        //    unreachable — the profile keeps a different id each boot while its secret
+        //    sits under the previous one, and the orphan sweep in [save] then deletes
+        //    what looks like a dead entry but is in fact the only copy of the key.
         val profiles = ArrayList<AiProvider>(arr.length())
         val legacyInline = ArrayList<String>(arr.length())
+        var mintedIds = 0
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
-            profiles.add(AiProvider.fromJson(o))
+            val p = AiProvider.fromJson(o)
+            profiles.add(p)
             legacyInline.add(o.optString("apiKey", ""))
+            if (o.optString("id").isBlank()) {
+                arr.getJSONObject(i).put("id", p.id)
+                mintedIds++
+            }
+        }
+        // Persist the minted ids as a group, immediately, so identity is durable from
+        // this read onward.
+        if (mintedIds > 0) {
+            try {
+                sp(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
+                LogStore.add(ctx, "প্রোভাইডার পরিচয় বসানো হলো ($mintedIds টা)")
+            } catch (e: Exception) {
+                // If this fails we must not migrate under the ephemeral id, or step 2
+                // would write a key into a name that is about to disappear.
+                LogStore.add(ctx, "⚠️ প্রোভাইডার পরিচয় সংরক্ষণ ব্যর্থ — মাইগ্রেশন পিছিয়ে দেওয়া হলো")
+                return profiles.mapIndexed { i, p -> p.copy(apiKey = legacyInline[i]) }
+            }
         }
 
         // 2. Resolve each profile's key, preferring the id-keyed slot and falling back
@@ -338,5 +364,68 @@ object AiProviderStore {
         )
         save(ctx, list)
         setSelected(ctx, 0)
+    }
+
+    /**
+     * Report, in the log, what each profile resolved to and which secure-store names
+     * exist — without ever writing a key.
+     *
+     * Exists because a provider key that fails to resolve is invisible from the outside:
+     * the request simply goes out with no `Authorization` header and comes back 401, and
+     * on a non-debuggable build the preferences file cannot be read to tell "the key was
+     * lost" apart from "the key is there but under the wrong name". This says which.
+     *
+     * Keys are reduced to a length and a 4-character fingerprint, which is enough to
+     * confirm *which* stored value a profile picked up and useless to anyone reading the
+     * log over someone's shoulder.
+     */
+    fun describeForTest(ctx: Context) {
+        val ids = SecurePrefs.namesWithPrefix(ctx, SECRET_PREFIX)
+        LogStore.add(ctx, "প্রোভাইডার ডায়াগনোসিস: সিক্রেট নাম ${ids.size} টা — " + ids.joinToString(", "))
+        val raw = rawList(ctx)
+        LogStore.add(ctx, "প্রোভাইডার ডায়াগনোসিস: প্রোফাইল ${raw.size} টা")
+        for ((i, p) in raw.withIndex()) {
+            LogStore.add(
+                ctx,
+                "  #${i + 1} ${p.name} · ${p.baseUrl} · id=${p.id.take(8)} · " +
+                        "key=${fingerprint(p.apiKey)} · selected=${selectedIndex(ctx) == i}"
+            )
+        }
+        LogStore.add(
+            ctx,
+            "প্রোভাইডার ডায়াগনোসিস: ব্লকড ${raw.count { isBlocked(it) }} টা বাদ যাবে"
+        )
+    }
+
+    /** `(length, first4)` — identifies a key without disclosing it. */
+    private fun fingerprint(key: String): String =
+        if (key.isBlank()) "নেই (খালি)" else "${key.length} অক্ষর, ${key.take(4)}…"
+
+    /**
+     * Reproduce the exact upgrade condition that lost keys on 28 Sep, so the fix can be
+     * shown to hold on the real device rather than only in a mirror.
+     *
+     * Writes a profile with a known key, then strips the `id` back out of the stored
+     * JSON — which is precisely the state a v1.52.4 install is in: a profile with a
+     * legacy slot-numbered secret and no identity. The next read has to mint an id, and
+     * the assertion is that the key survives the reads, a [save], and a restart.
+     *
+     * Only ever called from the headless `providertest` extra.
+     */
+    fun seedLegacyForTest(ctx: Context, key: String) {
+        // One profile, no id in the JSON, key only in the old slot-numbered name.
+        val arr = JSONArray()
+        arr.put(
+            JSONObject()
+                .put("name", "SeedTest")
+                .put("baseUrl", "https://seed.test/v1")
+                .put("model", "seed-model")
+        )
+        sp(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
+        for (name in SecurePrefs.namesWithPrefix(ctx, SECRET_PREFIX)) {
+            SecurePrefs.remove(ctx, name)
+        }
+        SecurePrefs.put(ctx, legacySecretName(0), key)
+        LogStore.add(ctx, "সিড: পুরোনো slot-নামে key বসানো হলো, প্রোফাইলে id নেই")
     }
 }

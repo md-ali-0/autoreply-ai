@@ -94,6 +94,10 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra(EXTRA_PENDINGTEST, false)) runPendingSeed()
         if (intent.getBooleanExtra(EXTRA_PENDINGCHECK, false)) runPendingCheck()
         if (intent.getBooleanExtra(EXTRA_LOGDUMP, false)) runLogDump()
+        if (intent.getBooleanExtra(EXTRA_PROVIDERCHECK, false)) AiProviderStore.describeForTest(this)
+        if (intent.getBooleanExtra(EXTRA_PROVIDERSEED, false)) {
+            AiProviderStore.seedLegacyForTest(this, "SEED-KEY-1234567890")
+        }
         if (intent.getBooleanExtra(EXTRA_NAVTEST, false)) {
             // After layout: switching sections drives the pager and the nav bar, and
             // both need real views to talk to.
@@ -307,6 +311,22 @@ class MainActivity : AppCompatActivity() {
          * device without a screen reader or a screenshot.
          */
         const val EXTRA_LOGDUMP = "logdump"
+
+        /**
+         * Writes what each provider profile resolved to, and which secure-store names
+         * exist. A key that fails to resolve produces a bare 401 with no clue where it
+         * went, and the preferences file is unreadable on a release build — this is the
+         * only way to see the difference between "lost" and "under the wrong name".
+         */
+        const val EXTRA_PROVIDERCHECK = "providercheck"
+
+        /**
+         * Reproduces the pre-id upgrade state for the provider store: a profile with a
+         * legacy slot-numbered secret and no id in its JSON. Pairs with
+         * [EXTRA_PROVIDERCHECK] to prove on hardware that the key survives having an id
+         * minted for it.
+         */
+        const val EXTRA_PROVIDERSEED = "providerseed"
 
         /** Bottom-navigation menu id for each section, indexed by section. */
         val SECTION_MENU_ID = intArrayOf(
