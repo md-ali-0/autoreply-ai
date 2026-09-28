@@ -2,7 +2,9 @@ package com.claw.autoreplyai
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import androidx.core.app.NotificationCompat
 
 /**
@@ -49,25 +51,49 @@ object Notify {
         return CHANNEL
     }
 
-    /** A message the bot left alone — the user should answer it personally. */
-    fun needsYou(ctx: Context, sender: String, message: String) {
+    /**
+     * A message the bot left alone — the user should answer it personally.
+     *
+     * [reason] says *why* it was left, which matters: "the AI thought this was too
+     * personal" and "this is an unknown number" need different reactions from the
+     * person reading it.
+     */
+    fun needsYou(ctx: Context, sender: String, message: String, reason: String? = null) {
         try {
             val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val body = if (reason.isNullOrBlank()) message else "$message\n\n$reason"
             val n = NotificationCompat.Builder(ctx, channelId(ctx))
                 .setSmallIcon(R.drawable.ic_stat_auto)
                 .setContentTitle("নিজে উত্তর দিন — $sender")
                 .setContentText(message.replace("\n", " ").take(120))
-                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setDefaults(NotificationCompat.DEFAULT_VIBRATE)
                 .setVibrate(longArrayOf(0, 250, 150, 250, 150, 450))
+                .setContentIntent(openApp(ctx))
                 .setAutoCancel(true)
                 .build()
             nm.notify(nextId(), n)
         } catch (_: Exception) {
             // never let a notification failure break the reply pipeline
         }
+    }
+
+    /**
+     * Tapping an alert should land in the app. Without this the notification just
+     * disappears, and the user has to go hunting for what it was about.
+     */
+    private fun openApp(ctx: Context): PendingIntent {
+        val intent = Intent(ctx, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        return PendingIntent.getActivity(
+            ctx,
+            7001,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     /** Fired when the AI has failed repeatedly — the bot is effectively dead. */

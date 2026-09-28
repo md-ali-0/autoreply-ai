@@ -78,6 +78,10 @@ object ReplyEngine {
 
         if (p.skipUnknown && looksLikeNumber(sender)) {
             log(app, "অচেনা নাম্বার — নিজে দেখুন — $sender")
+            Notify.needsYou(
+                app, sender, message,
+                "এই নাম্বারটা আপনার কন্টাক্টে সেভ করা নেই, তাই AI উত্তর দেয়নি।"
+            )
             digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
             return
         }
@@ -261,7 +265,10 @@ object ReplyEngine {
                 if (p.holdOnEmotional) {
                     log(app, "⚠️ নিজে উত্তর দিন — $sender: $preview")
                     ChatMemory.add(app, sender, "user", display)
-                    Notify.needsYou(app, sender, display)
+                    Notify.needsYou(
+                        app, sender, display,
+                        "ব্যক্তিগত বা গুরুত্বপূর্ণ মনে হয়েছে, তাই AI উত্তর দেয়নি।"
+                    )
                     digest(app, pkg, sender, display, DigestStore.ACTION_HELD, "")
                     return
                 }
@@ -316,6 +323,10 @@ object ReplyEngine {
         if (p.transcribeVoice && VoiceTranscriber.looksLikeVoiceNote(message)) {
             if (!MessagingApps.canTranscribeVoice(pkg)) {
                 log(app, "ভয়েস মেসেজ — ${MessagingApps.label(pkg)}-এর অডিও পড়া যায় না, তাই উত্তর দেওয়া হচ্ছে না — $sender")
+                Notify.needsYou(
+                    app, sender, "ভয়েস মেসেজ",
+                    "${MessagingApps.label(pkg)}-এর ভয়েস মেসেজ পড়া যায় না, তাই উত্তর দেওয়া হয়নি।"
+                )
                 digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
                 return Incoming("", fromVoice = true)
             }
@@ -323,6 +334,10 @@ object ReplyEngine {
             val transcript = VoiceTranscriber.transcribe(app, p, pkg, postTime)
             if (transcript.isNullOrBlank()) {
                 log(app, "ভয়েস মেসেজ পড়া গেল না — $sender")
+                Notify.needsYou(
+                    app, sender, "ভয়েস মেসেজ",
+                    "ভয়েস মেসেজটা পড়া যায়নি, তাই উত্তর দেওয়া হয়নি।"
+                )
                 digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
                 return Incoming("", fromVoice = true)
             }
@@ -347,6 +362,10 @@ object ReplyEngine {
                     app,
                     "ছবি পড়া গেল না — $sender। WhatsApp-এ Media auto-download চালু আছে কি? " +
                             "(WhatsApp → Settings → Storage and data → Media auto-download → Photos)"
+                )
+                Notify.needsYou(
+                    app, sender, "ছবি",
+                    "ছবিটা ফোনে নামেনি, তাই দেখা যায়নি — উত্তর দেওয়া হয়নি।"
                 )
                 digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
                 return Incoming("", fromVoice = false)
