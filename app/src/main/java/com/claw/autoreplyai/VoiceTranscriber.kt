@@ -178,6 +178,26 @@ object VoiceTranscriber {
         }
     }
 
+    /**
+     * Same as [transcribe], but ignores the freshness window — for the headless
+     * self test, where the newest voice note on the phone is almost certainly older
+     * than [FRESH_MS] and would otherwise be rejected.
+     */
+    fun transcribeForTest(ctx: Context, p: Prefs, pkg: String): String? {
+        val file = newestVoiceNote(ignoreFreshness = true)
+        if (file == null) {
+            LogStore.add(ctx, "ভয়েস টেস্ট: কোনো ভয়েস ফাইল পাওয়া যায়নি")
+            return null
+        }
+        LogStore.add(ctx, "ভয়েস টেস্ট: ফাইল=${file.name} (${file.length()} বাইট)")
+        return try {
+            upload(p, file).ifBlank { null }
+        } catch (e: Exception) {
+            LogStore.add(ctx, "ভয়েস টেস্ট ব্যর্থ: ${e.message}")
+            null
+        }
+    }
+
     private fun upload(p: Prefs, file: File): String {
         // Prefer a dedicated transcription endpoint; most cheap chat gateways have
         // no /audio/transcriptions route at all.
@@ -195,6 +215,10 @@ object VoiceTranscriber {
                 file.name,
                 file.asRequestBody("application/octet-stream".toMediaType())
             )
+            .apply {
+                val lang = p.transcribeLanguage.trim()
+                if (lang.isNotEmpty()) addFormDataPart("language", lang)
+            }
             .build()
 
         val builder = Request.Builder().url(url).post(body)
@@ -229,7 +253,7 @@ object VoiceTranscriber {
     // --------------------------------------------------------- file discovery
 
     /** The most recently written voice note, if one landed in the last [FRESH_MS]. */
-    private fun newestVoiceNote(): File? {
+    private fun newestVoiceNote(ignoreFreshness: Boolean = false): File? {
         var newest: File? = null
         var newestAt = 0L
         for (root in voiceNoteRoots()) {
@@ -241,6 +265,7 @@ object VoiceTranscriber {
             }
         }
         val hit = newest ?: return null
+        if (ignoreFreshness) return hit
         val age = System.currentTimeMillis() - newestAt
         return if (age in 0..FRESH_MS) hit else null
     }

@@ -102,6 +102,15 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getString("transcribeApiKey", "") ?: ""
         set(v) = sp.edit().putString("transcribeApiKey", v.trim()).apply()
 
+    /**
+     * ISO-639-1 hint for the transcriber. Without it Whisper guesses, and on short
+     * Bengali clips it guesses badly — the same voice note came back as Spanish,
+     * Turkish and Bengali script across attempts. `bn` anchors it. Blank = auto.
+     */
+    var transcribeLanguage: String
+        get() = sp.getString("transcribeLanguage", "bn") ?: "bn"
+        set(v) = sp.edit().putString("transcribeLanguage", v.trim()).apply()
+
     // ---------- language ----------
     /** Answer in the language the incoming message was written in. */
     var autoLanguage: Boolean

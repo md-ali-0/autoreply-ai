@@ -60,7 +60,30 @@ class MainActivity : AppCompatActivity() {
             runAiCheck()
         }
         if (intent?.getBooleanExtra(EXTRA_VOICETEST, false) == true) {
-            VoiceTranscriber.diagnose(this)
+            runVoiceCheck()
+        }
+    }
+
+    /**
+     * Headless voice check: reports what discovery can see, then actually runs a
+     * transcription on the newest voice note so the whole path — permission, file
+     * pick, upload, parse — is exercised without waiting for a real message.
+     */
+    private fun runVoiceCheck() {
+        VoiceTranscriber.diagnose(this)
+        val p = Prefs.get(this)
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            LogStore.add(
+                this@MainActivity,
+                "ভয়েস টেস্ট: এন্ডপয়েন্ট=${p.transcribeBaseUrl.ifBlank { "(চ্যাট প্রোভাইডার)" }}, " +
+                        "মডেল=${p.transcribeModel}, ভাষা=${p.transcribeLanguage.ifBlank { "(অটো)" }}"
+            )
+            val out = VoiceTranscriber.transcribeForTest(this@MainActivity, p, MessagingApps.WHATSAPP)
+            LogStore.add(
+                this@MainActivity,
+                if (out.isNullOrBlank()) "ভয়েস টেস্ট: ব্যর্থ ✗"
+                else "ভয়েস টেস্ট: সফল ✓ — ${out.take(200)}"
+            )
         }
     }
 
