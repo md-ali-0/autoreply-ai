@@ -54,7 +54,14 @@ object DirectReplier {
             LogStore.add(ctx, "✓ নোটিফিকেশন থেকেই সরাসরি রিপ্লাই পাঠানো হলো")
             true
         } catch (e: Exception) {
-            LogStore.add(ctx, "ডাইরেক্ট রিপ্লাই ব্যর্থ: ${e.message}")
+            // `e.message` is null for the exceptions that actually happen here — a bare
+            // NullPointerException from a recycled action, or a SecurityException with
+            // no detail. The class name is the only thing that identifies them, and
+            // without it the log read "ডাইরেক্ট রিপ্লাই ব্যর্থ: null" and told us nothing.
+            LogStore.add(
+                ctx,
+                "ডাইরেক্ট রিপ্লাই ব্যর্থ: ${e.javaClass.simpleName} — ${e.message ?: "কারণ নেই"}"
+            )
             false
         }
     }

@@ -558,9 +558,27 @@ object ReplyEngine {
             if (ok) {
                 onSent(app, p, pkg, sender, message, reply, contextChars)
             } else {
-                log(app, "✗ পাঠানো যায়নি → $sender (ফোন লক থাকলে লক খুলে রাখুন)")
+                // The reply was written and the contact got nothing. Telling the user
+                // is the whole point of the app being trustworthy: on 28 Sep a real
+                // reply to "মনের মাঝে তুমি" was lost to a locked screen and the log
+                // entry was the only trace of it.
+                val why = if (isScreenLocked(app))
+                    "ফোন লক ছিল, তাই পাঠানো যায়নি।"
+                else
+                    "চ্যাট খুলে পাঠানো যায়নি।"
+                log(app, "✗ পাঠানো যায়নি → $sender ($why)")
+                Notify.needsYou(app, sender, reply.take(80), "$why এটা নিজে পাঠিয়ে দিন।")
+                digest(app, pkg, sender, message, DigestStore.ACTION_FAILED, reply)
             }
         }
+    }
+
+    /** True when the keyguard is up, which the accessibility route cannot get past. */
+    private fun isScreenLocked(app: Context): Boolean = try {
+        val km = app.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        km.isKeyguardLocked
+    } catch (e: Exception) {
+        false
     }
 
     private fun onSent(
@@ -642,6 +660,11 @@ object ReplyEngine {
                     return result
                 }
                 lastError = java.io.IOException("${provider.name} খালি উত্তর দিয়েছে")
+                // This branch used to be silent, which is why a provider that answered
+                // HTTP 200 with an empty body six times in a row showed up only as a
+                // rising "টানা N বার" counter with no line naming the culprit.
+                log(app, "API খালি উত্তর — ${provider.name} (${provider.model})")
+                if (i < ordered.lastIndex) delay(1_500L)
             } catch (e: Exception) {
                 lastError = e
                 val reason = e.message ?: "অজানা ত্রুটি"
@@ -656,7 +679,10 @@ object ReplyEngine {
         val streak = p.failStreak + 1
         p.failStreak = streak
         log(app, "API ব্যর্থ (টানা $streak বার): $reason")
-        if (p.failAlert && streak == FAIL_ALERT_AFTER) {
+        // Alert at the threshold and then every few failures after it. Firing only on
+        // `streak == 3` meant a provider that recovered at 3 and died again later told
+        // the user nothing the second time.
+        if (p.failAlert && streak >= FAIL_ALERT_AFTER && streak % FAIL_ALERT_AFTER == 0) {
             Notify.botProblem(app, reason)
         }
     }

@@ -86,7 +86,27 @@ object AiClient {
             if (choices.length() == 0) throw IOException("AI খালি রেসপন্স দিয়েছে")
             val message = choices.getJSONObject(0).optJSONObject("message")
                 ?: throw IOException("message ফিল্ড নেই")
-            return message.optString("content", "").trim()
+
+            // Reasoning models (deepseek-r1 family and the many clones of it) split
+            // their output in two: the visible answer goes in `content`, the thinking
+            // goes in `reasoning_content`. Some gateways put the whole answer in
+            // `reasoning_content` and leave `content` empty — which is what apinex.bond
+            // did six times in a row on 28 Sep. Prefer `reasoning_content` over giving
+            // up: an answer that needs a trim beats no answer at all.
+            val content = message.optString("content", "").trim()
+            if (content.isNotEmpty()) return content
+
+            val reasoning = message.optString("reasoning_content", "").trim()
+            if (reasoning.isNotEmpty()) return reasoning
+
+            // Both empty: say *why* rather than returning "". A bare empty string is
+            // indistinguishable from a model that chose to say nothing, and that is
+            // exactly what made this bug invisible for a whole day.
+            throw IOException(
+                "খালি উত্তর — content ও reasoning_content দুটোই ফাঁকা " +
+                        "(মডেল: $model, finish_reason=" +
+                        choices.getJSONObject(0).optString("finish_reason", "?") + ")"
+            )
         }
     }
 

@@ -98,7 +98,8 @@ class HomeFragment : BaseSettingsFragment() {
         b.tvStatReplies.text = today.count { it.action == DigestStore.ACTION_REPLIED }.toString()
         b.tvStatWaiting.text = today.count {
             it.action == DigestStore.ACTION_HELD ||
-                    it.action == DigestStore.ACTION_APPROVAL
+                    it.action == DigestStore.ACTION_APPROVAL ||
+                    it.action == DigestStore.ACTION_FAILED
         }.toString()
         b.tvStatSkipped.text = today.count { it.action == DigestStore.ACTION_BLOCKED }.toString()
         b.tvHomeStatsEmpty.visibility = if (today.isEmpty()) View.VISIBLE else View.GONE

@@ -22,6 +22,12 @@ object DigestStore {
     const val ACTION_APPROVAL = "approval"
     const val ACTION_BLOCKED = "blocked"
 
+    /**
+     * A reply was written but could not be sent — usually a locked screen. Recorded
+     * so the message is not simply lost: the user sees it on Home and in the digest.
+     */
+    const val ACTION_FAILED = "failed"
+
     private const val FILE = "reply_digest"
     private const val KEY_EVENTS = "events"
     private const val KEY_LAST = "last_digest_at"
@@ -175,7 +181,8 @@ object Digest {
         val unanswered = events.filter {
             it.action == DigestStore.ACTION_HELD ||
                     it.action == DigestStore.ACTION_APPROVAL ||
-                    it.action == DigestStore.ACTION_BLOCKED
+                    it.action == DigestStore.ACTION_BLOCKED ||
+                    it.action == DigestStore.ACTION_FAILED
         }
 
         sb.append(fmt.format(Date(from))).append(" → ").append(fmt.format(Date(now))).append('\n')

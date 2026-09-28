@@ -41,14 +41,25 @@ class SendAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (deadline == 0L) return
-        if (System.currentTimeMillis() > deadline) {
-            finish(false)
-            return
+        // Accessibility services are the easiest thing in Android to crash by accident:
+        // recycled nodes, a disappearing window, a package that unloads mid-walk. An
+        // exception here kills the service, and a dead service means auto-reply stops
+        // with no visible symptom.
+        try {
+            if (deadline == 0L) return
+            if (System.currentTimeMillis() > deadline) {
+                finish(false)
+                return
+            }
+            val pkg = event?.packageName?.toString() ?: return
+            if (pkg != targetPkg) return
+            tick()
+        } catch (e: Throwable) {
+            LogStore.add(
+                applicationContext,
+                "‼️ অ্যাক্সেসিবিলিটি ইভেন্টে ত্রুটি — ${e.javaClass.simpleName}: ${e.message ?: ""}"
+            )
         }
-        val pkg = event?.packageName?.toString() ?: return
-        if (pkg != targetPkg) return
-        tick()
     }
 
     override fun onInterrupt() {}
@@ -158,20 +169,41 @@ class SendAccessibilityService : AccessibilityService() {
 
     private fun scheduleTick() {
         handler.postDelayed({
-            if (deadline == 0L) return@postDelayed
-            if (System.currentTimeMillis() > deadline) {
+            // This runs on the main looper: an uncaught throw here is an app crash,
+            // not a caught error, so the guard matters more than it does elsewhere.
+            try {
+                if (deadline == 0L) return@postDelayed
+                if (System.currentTimeMillis() > deadline) {
+                    finish(false)
+                    return@postDelayed
+                }
+                tick()
+                scheduleTick()
+            } catch (e: Throwable) {
+                LogStore.add(
+                    applicationContext,
+                    "‼️ টিক ব্যর্থ — ${e.javaClass.simpleName}: ${e.message ?: ""}"
+                )
                 finish(false)
-                return@postDelayed
             }
-            tick()
-            scheduleTick()
         }, TICK_MS)
     }
 
     private fun tick() {
         attempts++
-        val root = rootInActiveWindow ?: return
-        val pkgNow = root.packageName?.toString()
+        // Every node call below can throw IllegalStateException once Android has
+        // recycled the window we are walking. Failing this tick is fine — the next
+        // one re-reads the tree — so swallow it rather than losing the service.
+        val root = try {
+            rootInActiveWindow ?: return
+        } catch (e: Throwable) {
+            return
+        }
+        val pkgNow = try {
+            root.packageName?.toString()
+        } catch (e: Throwable) {
+            return
+        }
         if (pkgNow != targetPkg) return
 
         // 1. Tap Send if the text is already there (deep link) or once we typed it.
