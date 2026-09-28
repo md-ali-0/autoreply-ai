@@ -285,10 +285,8 @@ class Prefs private constructor(ctx: Context) {
 
     // ------------------------------------------------------------ cloud backup
 
-    /** Base URL of the backup API, without a trailing slash. */
-    var cloudUrl: String
-        get() = sp.getString("cloudUrl", "https://md-ali.dev/api/v1") ?: ""
-        set(v) = sp.edit().putString("cloudUrl", v.trim().trimEnd('/')).apply()
+    /** Fixed backup server — not user-configurable. */
+    val cloudUrl: String get() = "https://md-ali.dev/api/v1"
 
     /** Device token issued from the admin panel. */
     var cloudToken: String
@@ -305,7 +303,7 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getLong("cloudLastUpload", 0L)
         set(v) = sp.edit().putLong("cloudLastUpload", v).apply()
 
-    fun cloudConfigured(): Boolean = cloudUrl.isNotBlank() && cloudToken.isNotBlank()
+    fun cloudConfigured(): Boolean = cloudToken.isNotBlank()
 
     // ------------------------------------------------------------ backup
 

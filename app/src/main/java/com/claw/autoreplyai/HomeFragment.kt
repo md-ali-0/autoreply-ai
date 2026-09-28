@@ -1,10 +1,15 @@
 package com.claw.autoreplyai
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
 import com.claw.autoreplyai.databinding.FragmentHomeBinding
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * The landing screen: is the app healthy, what happened today, and what still
@@ -21,6 +26,14 @@ class HomeFragment : BaseSettingsFragment() {
     private var _b: FragmentHomeBinding? = null
     private val b get() = _b!!
 
+    private val exportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let { writeBackup(it) } }
+
+    private val importLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let { readBackup(it) } }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -36,6 +49,13 @@ class HomeFragment : BaseSettingsFragment() {
         b.btnHomePeople.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_PEOPLE) }
         b.btnHomeLogs.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_ACTIVITY, TabsAdapter.TAB_LOGS) }
         b.btnHomeBackup.setOnClickListener { (activity as? MainActivity)?.goToSection(TabsAdapter.SECTION_PEOPLE, TabsAdapter.TAB_CONTEXT) }
+
+        b.btnHomeExport.setOnClickListener {
+            exportLauncher.launch(Backup.SUGGESTED_NAME)
+        }
+        b.btnHomeImport.setOnClickListener {
+            importLauncher.launch(arrayOf("application/json"))
+        }
     }
 
     override fun load() = refresh()
@@ -82,6 +102,17 @@ class HomeFragment : BaseSettingsFragment() {
         }.toString()
         b.tvStatSkipped.text = today.count { it.action == DigestStore.ACTION_BLOCKED }.toString()
         b.tvHomeStatsEmpty.visibility = if (today.isEmpty()) View.VISIBLE else View.GONE
+
+        // ---- cloud backup status line ----
+        val at = prefs.cloudLastUpload
+        b.tvHomeCloudStatus.text = when {
+            !prefs.cloudConfigured() -> getString(R.string.cloud_missing)
+            at <= 0L -> getString(R.string.cloud_never)
+            else -> getString(
+                R.string.cloud_last,
+                SimpleDateFormat("dd MMM, hh:mm a", Locale.US).format(Date(at))
+            )
+        }
     }
 
     private fun startOfToday(): Long {
@@ -97,6 +128,35 @@ class HomeFragment : BaseSettingsFragment() {
         androidx.core.app.NotificationManagerCompat
             .getEnabledListenerPackages(requireContext())
             .contains(requireContext().packageName)
+
+    // ---------------------------------------------------------------- backup
+
+    private fun writeBackup(uri: Uri) {
+        try {
+            val json = Backup.build(requireContext())
+            val summary = Backup.verify(json)
+            requireContext().contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(json.toByteArray(Charsets.UTF_8))
+            }
+            toast("ব্যাকআপ সেভ হয়েছে — $summary")
+        } catch (e: Exception) {
+            toast("সেভ করা যায়নি: ${e.message}")
+        }
+    }
+
+    private fun readBackup(uri: Uri) {
+        try {
+            val text = requireContext().contentResolver.openInputStream(uri)?.use {
+                it.readBytes().toString(Charsets.UTF_8)
+            } ?: throw IllegalStateException("ফাইল পড়া গেল না")
+
+            val summary = Backup.restore(requireContext(), text)
+            toast(summary)
+            (activity as? MainActivity)?.reloadAllTabs()
+        } catch (e: Exception) {
+            toast("ফিরিয়ে আনা যায়নি: ${e.message}")
+        }
+    }
 
     override fun onViewsGone() {
         _b = null

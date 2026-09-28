@@ -1,12 +1,10 @@
 package com.claw.autoreplyai
 
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import com.claw.autoreplyai.databinding.FragmentContextBinding
 import com.claw.autoreplyai.databinding.ItemContextRowBinding
@@ -42,14 +40,6 @@ class ContextFragment : BaseSettingsFragment() {
 
     private val rows = mutableListOf<Row>()
 
-    private val exportLauncher = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri -> uri?.let { writeBackup(it) } }
-
-    private val importLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { readBackup(it) } }
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -61,14 +51,6 @@ class ContextFragment : BaseSettingsFragment() {
 
     override fun onViewsReady() {
         b.btnAddRow.setOnClickListener { addRow("", "", false) }
-
-        b.btnExport.setOnClickListener {
-            save() // capture whatever is on screen before snapshotting
-            exportLauncher.launch(Backup.SUGGESTED_NAME)
-        }
-        b.btnImport.setOnClickListener {
-            importLauncher.launch(arrayOf("application/json"))
-        }
 
         b.switchCloudAuto.setOnCheckedChangeListener { _, v -> prefs.cloudAutoUpload = v }
         b.btnCloudUpload.setOnClickListener { runCloud(upload = true) }
@@ -126,7 +108,6 @@ class ContextFragment : BaseSettingsFragment() {
         b.etMoodText.setText(prefs.moodText)
         b.etSafety.setText(prefs.safetyRule)
 
-        b.etCloudUrl.setText(prefs.cloudUrl)
         b.etCloudToken.setText(prefs.cloudToken)
         b.switchCloudAuto.isChecked = prefs.cloudAutoUpload
         refreshCloudStatus()
@@ -152,7 +133,6 @@ class ContextFragment : BaseSettingsFragment() {
         prefs.safetyRule = b.etSafety.text?.toString().orEmpty()
             .ifBlank { Prefs.DEFAULT_SAFETY }
 
-        prefs.cloudUrl = b.etCloudUrl.text?.toString().orEmpty()
         prefs.cloudToken = b.etCloudToken.text?.toString().orEmpty()
 
         ContactContext.save(
@@ -205,38 +185,6 @@ class ContextFragment : BaseSettingsFragment() {
             ""
         } else {
             getString(R.string.memory_count, ChatMemory.count(requireContext(), contact))
-        }
-    }
-
-    // ---------------------------------------------------------------- backup
-
-    private fun writeBackup(uri: Uri) {
-        try {
-            val json = Backup.build(requireContext())
-            // A backup that cannot be read back is worthless — check before writing.
-            val summary = Backup.verify(json)
-            requireContext().contentResolver.openOutputStream(uri)?.use { out ->
-                out.write(json.toByteArray(Charsets.UTF_8))
-            }
-            toast("ব্যাকআপ সেভ হয়েছে — $summary")
-        } catch (e: Exception) {
-            toast("সেভ করা যায়নি: ${e.message}")
-        }
-    }
-
-    private fun readBackup(uri: Uri) {
-        try {
-            val text = requireContext().contentResolver.openInputStream(uri)?.use {
-                it.readBytes().toString(Charsets.UTF_8)
-            } ?: throw IllegalStateException("ফাইল পড়া গেল না")
-
-            val summary = Backup.restore(requireContext(), text)
-            toast(summary)
-            // Refresh in place. Do NOT recreate() — that would run the outgoing
-            // fragments' save() and write their stale values over the restore.
-            (activity as? MainActivity)?.reloadAllTabs()
-        } catch (e: Exception) {
-            toast("ফিরিয়ে আনা যায়নি: ${e.message}")
         }
     }
 

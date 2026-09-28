@@ -125,7 +125,7 @@
     <string name="home_goto_setup">সেটআপ দেখুন</string>
     <string name="home_goto_people">কন্টাক্ট নিয়ম</string>
     <string name="home_goto_logs">লগ দেখুন</string>
-    <string name="home_goto_backup">ব্যাকআপ</string>
+    <string name="home_goto_backup">ক্লাউড</string>
     <string name="home_no_stats">আজ এখনো কোনো মেসেজ আসেনি।</string>
 
     <!-- ===== per-contact context ===== -->
@@ -218,7 +218,7 @@
     <string name="cloud_auto_sub">দিনে একবার নিজে থেকেই ব্যাকআপ পাঠাবে। টোকেন না দিলে কিছুই যাবে না।</string>
     <string name="cloud_last">শেষ আপলোড: %1$s</string>
     <string name="cloud_never">এখনো হয়নি</string>
-    <string name="cloud_missing">সার্ভারের ঠিকানা আর টোকেন দুটোই দিতে হবে</string>
+    <string name="cloud_missing">ডিভাইস টোকেন দিতে হবে</string>
     <string name="cloud_uploading">আপলোড হচ্ছে…</string>
     <string name="cloud_downloading">সার্ভার থেকে আনা হচ্ছে…</string>
 
