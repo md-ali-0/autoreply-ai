@@ -13,11 +13,19 @@ data class AiProvider(
     val apiKey: String,
     val model: String
 ) {
-    fun toJson(): JSONObject {
+    /**
+     * Serialise this profile.
+     *
+     * [includeSecret] exists for the backup path. A backup file is written to the
+     * user's Downloads folder and can be uploaded to a server, so it must not carry
+     * credentials — `Prefs.exportJson()` already strips its three secret keys for the
+     * same reason, and the provider list is the other place a key could escape.
+     */
+    fun toJson(includeSecret: Boolean = true): JSONObject {
         val o = JSONObject()
         o.put("name", name)
         o.put("baseUrl", baseUrl)
-        o.put("apiKey", apiKey)
+        if (includeSecret) o.put("apiKey", apiKey)
         o.put("model", model)
         return o
     }

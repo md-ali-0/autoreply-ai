@@ -89,6 +89,20 @@ object ChatMemory {
 
     private class Turn(val role: String, val content: String, val at: Long)
 
+    /**
+     * One lock per conversation bucket.
+     *
+     * [add] is a read-modify-write: it loads the list, appends, and writes the whole
+     * string back. Replies are dispatched concurrently (one coroutine per incoming
+     * message), so two turns landing in the same conversation could both read the old
+     * list and both write back — the second write silently discards the first turn.
+     * The lock makes that pair atomic. Keyed per conversation rather than globally so a
+     * busy chat cannot stall an unrelated one.
+     */
+    private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    private fun lockFor(key: String): Any = locks.getOrPut(key) { Any() }
+
     private fun load(ctx: Context, key: ConversationKey, legacyName: String? = null): List<Turn> {
         if (legacyName != null) migrate(ctx, key, legacyName, keyFor(FILE, key))
         val raw = sp(ctx).getString(keyFor(FILE, key), null) ?: return emptyList()
@@ -148,28 +162,31 @@ object ChatMemory {
 
     fun add(ctx: Context, key: ConversationKey, role: String, content: String, legacyName: String? = null) {
         val now = System.currentTimeMillis()
-        val list = load(ctx, key, legacyName)
-            .filter { it.at > 0L && now - it.at <= PRUNE_AGE_MS }
-            .toMutableList()
+        // Serialise the read-append-write for this conversation only.
+        synchronized(lockFor(keyFor(FILE, key))) {
+            val list = load(ctx, key, legacyName)
+                .filter { it.at > 0L && now - it.at <= PRUNE_AGE_MS }
+                .toMutableList()
 
-        list.add(Turn(role, content, now))
+            list.add(Turn(role, content, now))
 
-        // Hard cap so a long back-and-forth cannot grow the list without bound, and
-        // so the JSON string stays inside what a single preference can hold.
-        while (list.size > MAX_SEEN) list.removeAt(0)
+            // Hard cap so a long back-and-forth cannot grow the list without bound, and
+            // so the JSON string stays inside what a single preference can hold.
+            while (list.size > MAX_SEEN) list.removeAt(0)
 
-        // Everything left was pruned by age, so there is nothing worth keeping —
-        // drop the bucket instead of leaving an empty entry behind per conversation.
-        if (list.isEmpty()) {
-            sp(ctx).edit().remove(keyFor(FILE, key)).apply()
-            return
+            // Everything left was pruned by age, so there is nothing worth keeping —
+            // drop the bucket instead of leaving an empty entry behind per conversation.
+            if (list.isEmpty()) {
+                sp(ctx).edit().remove(keyFor(FILE, key)).apply()
+                return
+            }
+
+            val arr = JSONArray()
+            for (t in list) {
+                arr.put(JSONObject().put("role", t.role).put("content", t.content).put("at", t.at))
+            }
+            sp(ctx).edit().putString(keyFor(FILE, key), arr.toString()).apply()
         }
-
-        val arr = JSONArray()
-        for (t in list) {
-            arr.put(JSONObject().put("role", t.role).put("content", t.content).put("at", t.at))
-        }
-        sp(ctx).edit().putString(keyFor(FILE, key), arr.toString()).apply()
     }
 
     /** Wipe one conversation's memory, including anything still stored but expired. */

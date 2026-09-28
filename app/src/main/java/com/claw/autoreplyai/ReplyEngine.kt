@@ -125,11 +125,10 @@ object ReplyEngine {
         }
 
         if (p.onlyContacts && !p.moodEnabled) {
-            val allowed = p.contactList
-                .split('\n', ',', ';')
-                .map { it.trim().lowercase() }
-                .filter { it.isNotEmpty() }
-            if (allowed.none { sender.lowercase().contains(it) }) {
+            // Exact match, not substring: allowlisting "Ali" must not also admit
+            // "Alim". See [Matcher].
+            val allowed = parseList(p.contactList)
+            if (allowed.none { Matcher.name(sender, it) }) {
                 log(app, "ফিল্টার লিস্টে নেই — $sender")
                 digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
                 return
@@ -438,17 +437,15 @@ object ReplyEngine {
         val display = if (incoming.imageBase64 != null) "[ছবি]" else text
         val fromPhoto = incoming.imageBase64 != null
 
-        if (p.moodEnabled) {
-            handleMood(
-                app, p, key, pkg, sender, display, phoneHint, direct, contentIntent,
-                incoming.fromVoice, incoming.imageBase64
-            )
-            return
-        }
-
         // Some messages must never be answered by a machine on the user's behalf,
         // however well the model might phrase it. Catching them here costs nothing and
         // removes any chance of a confident-sounding wrong answer.
+        //
+        // This gate sits ABOVE the mood branch on purpose. Mood/gatekeeper mode is the
+        // most autonomous path in the app (it bypasses the contact filter and speaks
+        // *as* the user), so it is the path that needs the hold rule the most — not one
+        // that can be skipped. Routing it below here used to let an OTP request or a
+        // medical emergency be answered automatically.
         ReplyValidator.shouldHoldBeforeReply(text)?.let { why ->
             log(app, "🛑 নিজে দেখুন — $sender: $why")
             ChatMemory.add(app, key, "user", display, legacyName = sender)
@@ -457,9 +454,17 @@ object ReplyEngine {
             return
         }
 
+        if (p.moodEnabled) {
+            handleMood(
+                app, p, key, pkg, sender, display, phoneHint, direct, contentIntent,
+                incoming.fromVoice, incoming.imageBase64
+            )
+            return
+        }
+
         val messages = ArrayList<AiClient.Msg>()
-        val contactContext = ContactContext.forContact(app, sender)
-        val close = ContactContext.isClose(app, sender)
+        val contactContext = ContactContext.forContact(app, key, sender)
+        val close = ContactContext.isClose(app, key, sender)
         messages.add(
             AiClient.Msg(
                 "system",
@@ -736,6 +741,20 @@ object ReplyEngine {
             return
         }
 
+        // Same deterministic gate as the normal path. Mood mode answers every contact
+        // and the gatekeeper prompt is the loosest one in the app, so the draft goes
+        // through the validator before it can reach anyone. A held draft costs the user
+        // one tap; a sent promise cannot be taken back.
+        val verdict = ReplyValidator.validate(reply, message)
+        if (!verdict.allowed) {
+            val why = verdict.reason ?: "সন্দেহজনক উত্তর"
+            log(app, "🛑 নিজে দেখুন (mood) — $sender: $why\n    ▶ আটকে রাখা: ${reply.replace("\n", " ").take(90)}")
+            ChatMemory.add(app, key, "user", message, legacyName = sender)
+            Notify.needsYou(app, sender, reply.take(120), "$why — তাই AI নিজে পাঠায়নি।")
+            digest(app, pkg, sender, message, DigestStore.ACTION_HELD, reply)
+            return
+        }
+
         // Small delay so it doesn't look instant
         delay(p.replyDelayMs(quick = false).coerceAtMost(2_000L))
         deliverReply(app, p, key, pkg, sender, message, reply, reply, 0, phoneHint, direct, contentIntent)
@@ -957,11 +976,38 @@ object ReplyEngine {
         return sender.all { it.isDigit() || it in " +-()\u00a0" }
     }
 
-    private fun isBlocked(p: Prefs, sender: String): Boolean {        val s = sender.lowercase()
-        return p.neverReply
-            .split('\n', ',', ';')
-            .map { it.trim().lowercase() }
-            .any { it.isNotEmpty() && s.contains(it) }
+    private fun isBlocked(p: Prefs, sender: String): Boolean {
+        val names = parseList(p.neverReply)
+        return names.any { Matcher.name(sender, it) }
+    }
+
+    /** Split the text-box lists: one entry per line, comma or semicolon. */
+    private fun parseList(raw: String): List<String> =
+        raw.split('\n', ',', ';')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+    /**
+     * Compares a chat title against one allow/block entry.
+     *
+     * This used to be `sender.contains(entry)`, which reads sensibly until the day the
+     * user allowlists `Ali` and the bot then answers `Alim`, `Alina` and `Alif` as well.
+     * If the title is a phone number the digits are compared exactly instead, so
+     * `+8801712345678` matches `01712345678` and `8801712345678` but not a longer number
+     * that merely starts with it.
+     */
+    private object Matcher {
+        fun name(title: String, entry: String): Boolean {
+            val t = title.trim().lowercase()
+            val e = entry.trim().lowercase()
+            if (t.isEmpty() || e.isEmpty()) return false
+
+            val tDigits = t.filter { it.isDigit() }
+            val eDigits = e.filter { it.isDigit() }
+            if (looksLikeNumber(title) && eDigits.length >= 7) return tDigits == eDigits
+
+            return t == e
+        }
     }
 
     private fun buildSystemPrompt(

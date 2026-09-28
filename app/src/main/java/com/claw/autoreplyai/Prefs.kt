@@ -312,6 +312,19 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getBoolean("cloudAutoUpload", true)
         set(v) = sp.edit().putBoolean("cloudAutoUpload", v).apply()
 
+    /**
+     * Passphrase that encrypts the cloud backup.
+     *
+     * Not in [SecurePrefs]: that store is keyed to this device's hardware, and a backup
+     * whose key dies with the phone is useless exactly when it is needed. This value
+     * has to be something the user knows and can type on a new handset, so it is a
+     * normal stored preference — and an empty one means "do not upload at all", which
+     * is the safe default rather than a plaintext fallback.
+     */
+    var cloudPassphrase: String
+        get() = sp.getString("cloudPassphrase", "") ?: ""
+        set(v) = sp.edit().putString("cloudPassphrase", v).apply()
+
     /** When the last successful upload happened. */
     var cloudLastUpload: Long
         get() = sp.getLong("cloudLastUpload", 0L)

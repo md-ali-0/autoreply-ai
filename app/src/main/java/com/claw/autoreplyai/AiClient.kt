@@ -38,12 +38,54 @@ object AiClient {
         .readTimeout(75, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * Turn a user-entered base URL into a chat-completions endpoint, or explain why it
+     * cannot be one.
+     *
+     * Accepts what people actually type: a missing scheme (`api.example.com/v1`), a
+     * trailing slash, or the full endpoint (`…/v1/chat/completions`). Anything that is
+     * not `http`/`https`, has no host, or contains whitespace is rejected — those are
+     * never a valid API base and would otherwise fail deep inside OkHttp or, in the
+     * worst case, send the API key somewhere unintended.
+     */
+    @Throws(IOException::class)
+    fun normalizeBaseUrl(raw: String): String {
+        var s = raw.trim()
+        if (s.isEmpty()) throw IOException("API Base URL খালি")
+
+        if (s.any { it.isWhitespace() }) throw IOException("API Base URL-এ ফাঁকা জায়গা আছে")
+
+        if (!s.startsWith("http://", true) && !s.startsWith("https://", true)) {
+            s = "https://$s"
+        }
+        val lower = s.lowercase()
+        if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+            throw IOException("API Base URL http:// বা https:// দিয়ে শুরু হতে হবে")
+        }
+
+        val afterScheme = s.substringAfter("://")
+        val host = afterScheme.substringBefore('/').substringBefore('?')
+        if (host.isBlank()) throw IOException("API Base URL-এ কোনো হোস্ট নেই")
+        if (!host.contains('.') && !host.contains(':') && !host.equals("localhost", true)) {
+            throw IOException("API Base URL-এর হোস্ট ঠিক দেখাচ্ছে না: $host")
+        }
+
+        s = s.trimEnd('/')
+        // The user may have pasted the full endpoint; do not append a second time.
+        if (s.endsWith("/chat/completions")) return s
+        return "$s/chat/completions"
+    }
+
     @Throws(IOException::class)
     fun chat(baseUrl: String, apiKey: String, model: String, messages: List<Msg>): String {
         if (baseUrl.isBlank()) throw IOException("API Base URL খালি")
         if (model.isBlank()) throw IOException("মডেল খালি")
 
-        val url = baseUrl.trim().trimEnd('/') + "/chat/completions"
+        // Validate before building the request. A typo'd or hand-edited URL otherwise
+        // surfaces as whatever the network stack says — "no address associated with
+        // hostname", or worse, a request quietly sent to the wrong origin, which would
+        // take the API key with it. Cheap to check, so check here rather than per call.
+        val url = normalizeBaseUrl(baseUrl)
 
         val arr = JSONArray()
         for (m in messages) {

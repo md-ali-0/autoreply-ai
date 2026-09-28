@@ -35,7 +35,9 @@ class ContextFragment : BaseSettingsFragment() {
         val name: TextInputEditText,
         val body: TextInputEditText,
         val memInfo: TextView,
-        val close: MaterialSwitch
+        val close: MaterialSwitch,
+        /** Storage key for the adopted conversation, or null if not yet tied to one. */
+        var key: String? = null
     )
 
     private val rows = mutableListOf<Row>()
@@ -109,6 +111,7 @@ class ContextFragment : BaseSettingsFragment() {
         b.etSafety.setText(prefs.safetyRule)
 
         b.etCloudToken.setText(prefs.cloudToken)
+        b.etCloudPassphrase.setText(prefs.cloudPassphrase)
         b.switchCloudAuto.isChecked = prefs.cloudAutoUpload
         refreshCloudStatus()
 
@@ -119,7 +122,7 @@ class ContextFragment : BaseSettingsFragment() {
         if (entries.isEmpty()) {
             addRow("", "", false)
         } else {
-            entries.forEach { addRow(it.name, it.context, it.close) }
+            entries.forEach { addRow(it.name, it.context, it.close, it.key) }
         }
     }
 
@@ -134,6 +137,7 @@ class ContextFragment : BaseSettingsFragment() {
             .ifBlank { Prefs.DEFAULT_SAFETY }
 
         prefs.cloudToken = b.etCloudToken.text?.toString().orEmpty()
+        prefs.cloudPassphrase = b.etCloudPassphrase.text?.toString().orEmpty()
 
         ContactContext.save(
             requireContext(),
@@ -141,7 +145,8 @@ class ContextFragment : BaseSettingsFragment() {
                 ContactContext.Entry(
                     it.name.text?.toString().orEmpty().trim(),
                     it.body.text?.toString().orEmpty().trim(),
-                    it.close.isChecked
+                    it.close.isChecked,
+                    it.key
                 )
             }
         )
@@ -149,13 +154,13 @@ class ContextFragment : BaseSettingsFragment() {
 
     // ------------------------------------------------------------------ rows
 
-    private fun addRow(name: String, context: String, close: Boolean) {
+    private fun addRow(name: String, context: String, close: Boolean, key: String? = null) {
         val row = ItemContextRowBinding.inflate(layoutInflater, b.ctxContainer, false)
         row.etCtxName.setText(name)
         row.etCtxBody.setText(context)
         row.switchCtxClose.isChecked = close
 
-        val entry = Row(row.root, row.etCtxName, row.etCtxBody, row.tvMemInfo, row.switchCtxClose)
+        val entry = Row(row.root, row.etCtxName, row.etCtxBody, row.tvMemInfo, row.switchCtxClose, key)
         updateMemory(entry)
 
         row.btnRemoveRow.setOnClickListener {

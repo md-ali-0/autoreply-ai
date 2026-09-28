@@ -28,21 +28,25 @@ object Backup {
 
         // Provider list lives in a separate prefs file, so it must be captured
         // explicitly — otherwise a restore brings back only the selected one.
+        //
+        // Secrets are excluded: a backup is a portable file, and `Prefs.exportJson()`
+        // above already scrubs its three secret keys. Writing the provider `apiKey`
+        // here would have leaked every saved key through the very same file.
         val providerArr = JSONArray()
         for (prov in AiProviderStore.all(ctx)) {
-            providerArr.put(prov.toJson())
+            providerArr.put(prov.toJson(includeSecret = false))
         }
         root.put("providers", providerArr)
         root.put("providerSelected", AiProviderStore.selectedIndex(ctx))
 
         val arr = JSONArray()
         for (e in ContactContext.all(ctx)) {
-            arr.put(
-                JSONObject()
-                    .put("name", e.name)
-                    .put("context", e.context)
-                    .put("close", e.close)
-            )
+            val o = JSONObject()
+                .put("name", e.name)
+                .put("context", e.context)
+                .put("close", e.close)
+            e.key?.let { o.put("key", it) }
+            arr.put(o)
         }
         root.put("contexts", arr)
         root.put("memory", ChatMemory.snapshot(ctx))
@@ -73,6 +77,10 @@ object Backup {
 
         // Restore the full provider list (v2+). v1 snapshots have no "providers"
         // key, so the existing providers on the device are left untouched.
+        //
+        // Snapshots written from v1.52.2 on carry no `apiKey` (see `build`), so the
+        // restored profile has a blank key and the user re-enters it once. Older
+        // snapshots may still contain one — honour it rather than dropping the field.
         root.optJSONArray("providers")?.let { arr ->
             val list = ArrayList<AiProvider>(arr.length())
             for (i in 0 until arr.length()) {
@@ -93,8 +101,11 @@ object Backup {
                 val body = o.optString("context").trim()
                 if (name.isNotEmpty() || body.isNotEmpty()) {
                     // `close` is absent in snapshots written before it existed, so it
-                    // defaults to false rather than failing the whole restore.
-                    list.add(ContactContext.Entry(name, body, o.optBoolean("close", false)))
+                    // defaults to false rather than failing the whole restore. `key`
+                    // is likewise optional: a snapshot from an older build has only the
+                    // name, and that entry gets adopted on next contact.
+                    val k = o.optString("key").trim().takeIf { it.isNotEmpty() }
+                    list.add(ContactContext.Entry(name, body, o.optBoolean("close", false), k))
                 }
             }
             ContactContext.save(ctx, list)
