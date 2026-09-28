@@ -44,7 +44,8 @@ object ReplyEngine {
         isGroup: Boolean,
         phoneHint: String?,
         direct: DirectReplier.Handle?,
-        contentIntent: PendingIntent? = null
+        contentIntent: PendingIntent? = null,
+        postTime: Long = 0L
     ) {
         val app = ctx.applicationContext
         val p = Prefs.get(app)
@@ -99,7 +100,7 @@ object ReplyEngine {
         // reads as the bot answering the wrong thing.
         val remaining = p.cooldownSec * 1000L - (System.currentTimeMillis() - p.lastReply(sender))
         if (remaining > 0) {
-            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent)
+            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime)
             log(app, "কুলডাউনে — $sender (নতুন মেসেজটা পরে উত্তর দেওয়া হবে)")
             schedulePending(app, sender, remaining)
             return
@@ -107,7 +108,7 @@ object ReplyEngine {
 
         if (!inFlight.add(sender)) {
             // Same reasoning as the cooldown — never lose the message, queue it.
-            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent)
+            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime)
             log(app, "আগের রিপ্লাই চলছে — $sender (এই মেসেজটা পরে উত্তর দেওয়া হবে)")
             schedulePending(app, sender, 3_000L)
             return
@@ -115,7 +116,7 @@ object ReplyEngine {
 
         scope.launch {
             try {
-                handle(app, p, pkg, sender, message, phoneHint, direct, contentIntent)
+                handle(app, p, pkg, sender, message, phoneHint, direct, contentIntent, postTime)
             } catch (e: Exception) {
                 log(app, "ত্রুটি — $sender: ${e.message}")
             } finally {
@@ -132,7 +133,8 @@ object ReplyEngine {
         val message: String,
         val phoneHint: String?,
         val direct: DirectReplier.Handle?,
-        val contentIntent: PendingIntent?
+        val contentIntent: PendingIntent?,
+        val postTime: Long
     )
 
     private val pending = Collections.synchronizedMap(HashMap<String, Pending>())
@@ -172,7 +174,7 @@ object ReplyEngine {
 
             pending.remove(sender)
             try {
-                handle(app, p, msg.pkg, msg.sender, msg.message, msg.phoneHint, msg.direct, msg.contentIntent)
+                handle(app, p, msg.pkg, msg.sender, msg.message, msg.phoneHint, msg.direct, msg.contentIntent, msg.postTime)
             } catch (e: Exception) {
                 log(app, "পরে উত্তর দিতে গিয়ে ত্রুটি — $sender: ${e.message}")
             } finally {
@@ -189,11 +191,12 @@ object ReplyEngine {
         message: String,
         phoneHint: String?,
         direct: DirectReplier.Handle?,
-        contentIntent: PendingIntent?
+        contentIntent: PendingIntent?,
+        postTime: Long
     ) {
         // Voice notes arrive as a placeholder ("🎤 Voice message"). Turn them into
         // text first, otherwise the model is answering the word "Voice message".
-        val incoming = resolveIncomingText(app, p, pkg, sender, message)
+        val incoming = resolveIncomingText(app, p, pkg, sender, message, postTime)
         val text = incoming.text
         if (text.isBlank()) return
 
@@ -300,7 +303,8 @@ object ReplyEngine {
         p: Prefs,
         pkg: String,
         sender: String,
-        message: String
+        message: String,
+        postTime: Long
     ): Incoming {
         // ---- voice note ----
         if (p.transcribeVoice && VoiceTranscriber.looksLikeVoiceNote(message)) {
@@ -310,7 +314,7 @@ object ReplyEngine {
                 return Incoming("", fromVoice = true)
             }
             log(app, "ভয়েস মেসেজ পেয়েছি — ট্রান্সক্রিপ্ট করছি — $sender")
-            val transcript = VoiceTranscriber.transcribe(app, p, pkg)
+            val transcript = VoiceTranscriber.transcribe(app, p, pkg, postTime)
             if (transcript.isNullOrBlank()) {
                 log(app, "ভয়েস মেসেজ পড়া গেল না — $sender")
                 digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
@@ -324,10 +328,10 @@ object ReplyEngine {
         if (p.understandPhotos && ImageReader.looksLikePhoto(message)) {
             // WhatsApp posts the notification and writes the file in parallel, so a
             // single immediate look can race the download. Give it a moment.
-            var img = ImageReader.loadLatestBase64(app)
+            var img = ImageReader.loadLatestBase64(app, postTime)
             if (img == null) {
                 delay(2_500L)
-                img = ImageReader.loadLatestBase64(app)
+                img = ImageReader.loadLatestBase64(app, postTime)
             }
             if (img == null) {
                 // Almost always one of two things: WhatsApp's "Media auto-download"

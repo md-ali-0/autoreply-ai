@@ -57,11 +57,16 @@ object ImageReader {
     // ------------------------------------------------------------------ load
 
     /**
-     * The newest incoming photo as base64 JPEG, or null when there is none to read.
-     * Never throws — the caller is a reply pipeline, not an error handler.
+     * The photo belonging to the notification at [postTime], as base64 JPEG, or
+     * null when there is none to read. Never throws — the caller is a reply
+     * pipeline, not an error handler.
      */
-    fun loadLatestBase64(ctx: Context, ignoreFreshness: Boolean = false): String? {
-        val file = newestImage(ignoreFreshness) ?: return null
+    fun loadLatestBase64(
+        ctx: Context,
+        postTime: Long = 0L,
+        ignoreFreshness: Boolean = false
+    ): String? {
+        val file = pickImage(postTime, ignoreFreshness) ?: return null
         return try {
             val bytes = downscale(file)
             if (bytes == null) {
@@ -108,33 +113,55 @@ object ImageReader {
     // ------------------------------------------------------------ file search
 
     private fun newestImage(ignoreFreshness: Boolean): File? {
-        var newest: File? = null
-        var newestAt = 0L
-        for (root in imageRoots()) {
-            val hit = newestUnder(root) ?: continue
-            val at = hit.lastModified()
-            if (at > newestAt) {
-                newestAt = at
-                newest = hit
+        val all = ArrayList<File>()
+        for (root in imageRoots()) collect(root, 0, all)
+        if (all.isEmpty()) return null
+        if (ignoreFreshness) return all.maxByOrNull { it.lastModified() }
+        val newest = all.maxByOrNull { it.lastModified() } ?: return null
+        val age = System.currentTimeMillis() - newest.lastModified()
+        return if (age in 0..FRESH_MS) newest else null
+    }
+
+    /** The photo that belongs to this notification, claimed so no other chat takes it. */
+    private fun pickImage(postTime: Long, ignoreFreshness: Boolean): File? {
+        val all = ArrayList<File>()
+        for (root in imageRoots()) collect(root, 0, all)
+        if (all.isEmpty()) return null
+
+        // The self test has no notification to match against, so it just takes the
+        // newest and does not consume the claim.
+        if (ignoreFreshness) return all.maxByOrNull { it.lastModified() }
+
+        return MediaMatcher.pick(
+            candidates = all,
+            postTime = postTime,
+            mtimeOf = { it.lastModified() },
+            keyOf = { "${it.path}@${it.lastModified()}" }
+        )
+    }
+
+    private fun collect(dir: File, depth: Int, into: MutableList<File>) {
+        if (depth > 2) return
+        val children = try {
+            dir.listFiles() ?: return
+        } catch (e: Exception) {
+            return
+        }
+        for (f in children) {
+            if (f.isDirectory) {
+                // "Sent" holds pictures *we* sent — replying to those makes no sense.
+                if (f.name.equals("Sent", true)) continue
+                collect(f, depth + 1, into)
+            } else if (f.extension.lowercase() in IMAGE_EXT) {
+                into.add(f)
             }
         }
-        val hit = newest ?: return null
-        if (ignoreFreshness) return hit
-        val age = System.currentTimeMillis() - newestAt
-        return if (age in 0..FRESH_MS) hit else null
     }
 
     private fun newestUnder(root: File): File? {
-        var newest: File? = null
-        var newestAt = 0L
-        walk(root, 0) { f ->
-            val at = f.lastModified()
-            if (at > newestAt) {
-                newestAt = at
-                newest = f
-            }
-        }
-        return newest
+        val all = ArrayList<File>()
+        collect(root, 0, all)
+        return all.maxByOrNull { it.lastModified() }
     }
 
     private fun imageRoots(): List<File> {
@@ -146,24 +173,6 @@ object ImageReader {
             "WhatsApp Business/Media/WhatsApp Images"
         )
         return candidates.map { File(base, it) }.filter { it.isDirectory }
-    }
-
-    private fun walk(dir: File, depth: Int, onFile: (File) -> Unit) {
-        if (depth > 2) return
-        val children = try {
-            dir.listFiles() ?: return
-        } catch (e: Exception) {
-            return
-        }
-        for (f in children) {
-            if (f.isDirectory) {
-                // "Sent" holds pictures *we* sent — replying to those makes no sense.
-                if (f.name.equals("Sent", true)) continue
-                walk(f, depth + 1, onFile)
-            } else if (f.extension.lowercase() in IMAGE_EXT) {
-                onFile(f)
-            }
-        }
     }
 
     // ------------------------------------------------------------- downscale

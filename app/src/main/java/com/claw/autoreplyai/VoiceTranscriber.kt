@@ -146,7 +146,7 @@ object VoiceTranscriber {
      * Returns the transcript, or null when it could not be produced.
      * Never throws — the caller is a reply pipeline, not an error handler.
      */
-    fun transcribe(ctx: Context, p: Prefs, pkg: String): String? {
+    fun transcribe(ctx: Context, p: Prefs, pkg: String, postTime: Long = 0L): String? {
         if (!MessagingApps.canTranscribeVoice(pkg)) {
             LogStore.add(ctx, "ভয়েস ট্রান্সক্রিপশন: ${MessagingApps.label(pkg)}-এর অডিও পড়া যায় না")
             return null
@@ -159,7 +159,7 @@ object VoiceTranscriber {
             return null
         }
 
-        val file = newestVoiceNote() ?: run {
+        val file = pickVoiceNote(postTime) ?: run {
             LogStore.add(ctx, "ভয়েস ট্রান্সক্রিপশন: নতুন ভয়েস ফাইল পাওয়া যায়নি (পরীক্ষা বোতাম চাপুন)")
             return null
         }
@@ -254,20 +254,30 @@ object VoiceTranscriber {
 
     /** The most recently written voice note, if one landed in the last [FRESH_MS]. */
     private fun newestVoiceNote(ignoreFreshness: Boolean = false): File? {
-        var newest: File? = null
-        var newestAt = 0L
-        for (root in voiceNoteRoots()) {
-            val hit = newestUnder(root) ?: continue
-            val at = hit.lastModified()
-            if (at > newestAt) {
-                newestAt = at
-                newest = hit
-            }
-        }
-        val hit = newest ?: return null
-        if (ignoreFreshness) return hit
-        val age = System.currentTimeMillis() - newestAt
-        return if (age in 0..FRESH_MS) hit else null
+        val all = ArrayList<File>()
+        for (root in voiceNoteRoots()) walk(root, 0) { all.add(it) }
+        if (all.isEmpty()) return null
+        val newest = all.maxByOrNull { it.lastModified() } ?: return null
+        if (ignoreFreshness) return newest
+        val age = System.currentTimeMillis() - newest.lastModified()
+        return if (age in 0..FRESH_MS) newest else null
+    }
+
+    /**
+     * The voice note that belongs to this notification. Two notes arriving together
+     * used to be indistinguishable, and one chat could be answered with another
+     * chat's audio.
+     */
+    private fun pickVoiceNote(postTime: Long): File? {
+        val all = ArrayList<File>()
+        for (root in voiceNoteRoots()) walk(root, 0) { all.add(it) }
+        if (all.isEmpty()) return null
+        return MediaMatcher.pick(
+            candidates = all,
+            postTime = postTime,
+            mtimeOf = { it.lastModified() },
+            keyOf = { "${it.path}@${it.lastModified()}" }
+        )
     }
 
     /** Newest audio file anywhere under [root], or null when it cannot be read. */

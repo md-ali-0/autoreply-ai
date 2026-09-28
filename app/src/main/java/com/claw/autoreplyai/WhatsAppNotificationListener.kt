@@ -194,7 +194,8 @@ class WhatsAppNotificationListener : NotificationListenerService() {
         }
 
         ReplyEngine.onIncoming(
-            applicationContext, pkg, title, text, isGroup, phoneHint, directReply, contentIntent
+            applicationContext, pkg, title, text, isGroup, phoneHint, directReply, contentIntent,
+            sbn.postTime
         )
     }
 
