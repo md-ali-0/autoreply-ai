@@ -107,8 +107,10 @@ object AiProviderStore {
      *
      * The key is read from [SecurePrefs] by the profile's **position in the stored
      * list**, which is the same slot `save` writes to and the same thing `selected`
-     * indexes. Doing this in one pass (rather than a migration per entry) means the
-     * plaintext scrub happens once, not once per provider.
+     * indexes. Legacy plaintext keys (written inline by builds before v1.52.3) are
+     * migrated here, one slot at a time. A slot is only scrubbed from the list after its
+     * own migration is confirmed, so a partial Keystore failure costs nothing — the
+     * un-migrated key stays on disk and is retried on the next read.
      */
     private fun rawList(ctx: Context): List<AiProvider> {
         val raw = sp(ctx).getString(KEY_LIST, "[]") ?: "[]"
@@ -121,61 +123,78 @@ object AiProviderStore {
         // 1. Read every profile and collect any legacy plaintext keys in the same pass.
         val profiles = ArrayList<AiProvider>(arr.length())
         val legacy = ArrayList<String>(arr.length())
-        var sawPlaintext = false
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
-            val p = AiProvider.fromJson(o)
-            profiles.add(p)
-            val inline = o.optString("apiKey", "")
-            legacy.add(inline)
-            if (inline.isNotBlank()) sawPlaintext = true
+            profiles.add(AiProvider.fromJson(o))
+            legacy.add(o.optString("apiKey", ""))
         }
 
         // 2. Migrate the plaintext keys into SecurePrefs, once.
-        if (sawPlaintext) {
-            var migrated = 0
-            for (i in legacy.indices) {
-                val key = legacy[i]
-                if (key.isBlank()) continue
-                if (SecurePrefs.put(ctx, secretName(i), key)) migrated++
-            }
-            if (migrated > 0) {
-                rewriteWithoutSecrets(ctx)
-                LogStore.add(ctx, "প্রোভাইডার key সুরক্ষিত স্টোরেজে সরানো হলো ($migrated টা)")
-            }
+        //
+        // Per-slot, and the scrub is per-slot too. `SecurePrefs.put` returns false when
+        // the Keystore is unavailable, and that can happen for one write and not the
+        // next. Scrubbing the whole list as soon as *any* write succeeded would delete
+        // the plaintext of a slot that was never migrated — the key would be gone from
+        // both stores, permanently. So each slot is scrubbed only after its own write
+        // was confirmed, and a slot that failed is left exactly as it was for the next
+        // attempt.
+        val migratedSlots = ArrayList<Int>()
+        for (i in legacy.indices) {
+            val key = legacy[i]
+            if (key.isBlank()) continue
+            if (SecurePrefs.put(ctx, secretName(i), key)) migratedSlots.add(i)
+        }
+        if (migratedSlots.isNotEmpty()) {
+            scrubSecrets(ctx, migratedSlots)
+            LogStore.add(ctx, "প্রোভাইডার key সুরক্ষিত স্টোরেজে সরানো হলো (${migratedSlots.size} টা)")
         }
 
-        // 3. Attach whatever is now in secure storage (migrated or previously stored).
+        // 3. Attach the key for each profile: the migrated/persisted one if the secure
+        // store has it, otherwise the plaintext still sitting in the list. Falling back
+        // matters — without it a slot whose migration failed would read back as blank
+        // for this whole boot, and the reply pipeline would report "no provider
+        // configured" while the key was on disk the entire time.
         return profiles.mapIndexed { i, p ->
-            p.copy(apiKey = SecurePrefs.get(ctx, secretName(i)).orEmpty())
-        }
-    }
-
-    /** Rewrite the stored list, dropping any `apiKey` field left by an older build. */
-    private fun rewriteWithoutSecrets(ctx: Context) {
-        try {
-            val raw = sp(ctx).getString(KEY_LIST, "[]") ?: "[]"
-            val arr = JSONArray(raw)
-            val clean = JSONArray()
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                o.remove("apiKey")
-                clean.put(o)
-            }
-            sp(ctx).edit().putString(KEY_LIST, clean.toString()).apply()
-        } catch (e: Exception) {
-            // Best effort — a failure leaves the list readable, just not yet scrubbed.
+            val secure = SecurePrefs.get(ctx, secretName(i))
+            p.copy(apiKey = secure ?: legacy[i])
         }
     }
 
     /**
-     * Persist the whole list and each key.
+     * Drop the `apiKey` field from the named slots only.
+     *
+     * [slots] is the set of indices whose key is now confirmed present in [SecurePrefs].
+     * Every other slot keeps its value — see the migration comment in [rawList] for why
+     * a blanket scrub is unsafe.
+     */
+    private fun scrubSecrets(ctx: Context, slots: List<Int>) {
+        if (slots.isEmpty()) return
+        try {
+            val raw = sp(ctx).getString(KEY_LIST, "[]") ?: "[]"
+            val arr = JSONArray(raw)
+            for (i in slots) {
+                if (i in 0 until arr.length()) arr.getJSONObject(i).remove("apiKey")
+            }
+            sp(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
+        } catch (e: Exception) {
+            // Best effort. A failure leaves the list readable and the key still in the
+            // secure store, so the worst case is a redundant plaintext copy that the
+            // next read will try to scrub again.
+        }
+    }
+
+    /**
+     * Persist the whole list and each key. Returns the number of keys that could **not**
+     * be written to secure storage, so the caller can say so.
      *
      * Called with the in-memory list, which carries keys. The keys go to [SecurePrefs],
      * the rest goes to the plain preference — and every slot is rewritten so a delete or
      * reorder cannot leave a previous provider's key attached to a different profile.
+     *
+     * A failed write is reported rather than swallowed. Losing a key here is the user's
+     * own edit not persisting, which is recoverable — but only if they are told.
      */
-    fun save(ctx: Context, list: List<AiProvider>) {
+    fun save(ctx: Context, list: List<AiProvider>): Int {
         // A blocked host can never be written back, whatever the caller passes.
         val clean = list.filterNot { isBlocked(it) }
 
@@ -183,15 +202,21 @@ object AiProviderStore {
         clean.forEach { arr.put(it.toJson(includeSecret = false)) }
         sp(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
 
+        var failed = 0
         for ((i, p) in clean.withIndex()) {
-            if (p.apiKey.isBlank()) SecurePrefs.remove(ctx, secretName(i))
-            else SecurePrefs.put(ctx, secretName(i), p.apiKey)
+            if (p.apiKey.isBlank()) {
+                SecurePrefs.remove(ctx, secretName(i))
+            } else if (!SecurePrefs.put(ctx, secretName(i), p.apiKey)) {
+                failed++
+                LogStore.add(ctx, "⚠️ প্রোভাইডার key সংরক্ষণ করা যায়নি (#${i + 1})")
+            }
         }
         // Clear slots beyond the new end, or a deleted provider's key would linger.
         for (i in clean.size until clean.size + 8) {
             if (!SecurePrefs.has(ctx, secretName(i))) break
             SecurePrefs.remove(ctx, secretName(i))
         }
+        return failed
     }
 
     private fun rawListStoredIndex(ctx: Context): Int =

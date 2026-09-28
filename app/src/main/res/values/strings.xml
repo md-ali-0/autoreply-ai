@@ -214,7 +214,8 @@
     <string name="cloud_url">সার্ভারের ঠিকানা</string>
     <string name="cloud_token">ডিভাইস টোকেন</string>
     <string name="cloud_passphrase">ব্যাকআপ পাসফ্রেজ</string>
-    <string name="cloud_passphrase_note">আপনার চ্যাট মেমোরি আর কন্টাক্ট নোট এই পাসফ্রেজ দিয়ে এনক্রিপ্ট হয়ে সার্ভারে যাবে — সার্ভার কখনো পাসফ্রেজটা দেখে না। নতুন ফোনে ফিরিয়ে আনতে একই পাসফ্রেজ লাগবে, তাই এটা ভুলে যাবেন না।</string>
+    <string name="cloud_passphrase_note">আপনার চ্যাট মেমোরি আর কন্টাক্ট নোট এই পাসফ্রেজ দিয়ে এনক্রিপ্ট হয়ে সার্ভারে যাবে — সার্ভার কখনো পাসফ্রেজটা দেখে না। পাসফ্রেজটা এই ফোনেই রাখা থাকে, তাই ফোন হারালে বা নতুন ফোনে ফিরিয়ে আনতে এটা নিজে থেকে মনে রাখতে হবে।</string>
+    <string name="provider_key_save_failed">API key সুরক্ষিত স্টোরেজে রাখা যায়নি — আবার চেষ্টা করুন</string>
     <string name="cloud_upload">এখনই আপলোড</string>
     <string name="cloud_download">ফিরিয়ে আনুন</string>
     <string name="cloud_auto">নিজে থেকে আপলোড করবে</string>

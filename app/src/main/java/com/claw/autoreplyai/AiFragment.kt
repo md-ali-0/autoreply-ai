@@ -129,7 +129,13 @@ class AiFragment : BaseSettingsFragment() {
             apiKey = b.etKey.text?.toString().orEmpty(),
             model = b.etModel.text?.toString().orEmpty()
         )
-        AiProviderStore.save(requireContext(), providers)
+        val failed = AiProviderStore.save(requireContext(), providers)
+        // A key that could not be written to secure storage is worth saying out loud —
+        // otherwise the field looks saved and the bot silently stops authenticating on
+        // the next reply.
+        if (failed > 0) {
+            toast(getString(R.string.provider_key_save_failed))
+        }
     }
 
     private fun loadProviderFields(index: Int) {
@@ -154,6 +160,7 @@ class AiFragment : BaseSettingsFragment() {
         AiProviderStore.save(requireContext(), providers)
         selectedIndex = providers.lastIndex
         AiProviderStore.setSelected(requireContext(), selectedIndex)
+
         refreshProviderSpinner()
         loadProviderFields(selectedIndex)
         toast("$newName যোগ করা হলো")
