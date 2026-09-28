@@ -128,6 +128,22 @@ object SecurePrefs {
     }
 
     /**
+     * Every stored secret whose name begins with [prefix].
+     *
+     * Exists so a caller holding a set of *live* names can find the ones left behind.
+     * The provider store needs this after a delete or a restore: its secrets are named
+     * by a generated id, so there is no arithmetic that reaches "the names past the
+     * end of the list" — the only way to find an orphan is to enumerate what is
+     * actually there.
+     */
+    fun namesWithPrefix(ctx: Context, prefix: String): List<String> =
+        try {
+            sp(ctx).all.keys.filter { it.startsWith(prefix) }
+        } catch (e: Throwable) {
+            emptyList()
+        }
+
+    /**
      * One-time move of a value from plaintext preferences into encrypted storage.
      * Idempotent: once the encrypted copy exists the plaintext one is dropped, and a
      * second call does nothing.

@@ -123,7 +123,13 @@ class AiFragment : BaseSettingsFragment() {
     /** Write the on-screen fields back into the current provider before switching. */
     private fun commitCurrentProvider() {
         if (providers.isEmpty() || selectedIndex !in providers.indices) return
+        // Carry the existing id across. The id is what names this profile's key in
+        // secure storage, so rebuilding the profile without it would mint a new one and
+        // orphan the key that was just saved — the edit would look fine, persist
+        // nothing, and the bot would stop authenticating on the next reply.
+        val existing = providers[selectedIndex]
         providers[selectedIndex] = AiProvider(
+            id = existing.id,
             name = b.etProviderName.text?.toString().orEmpty().ifBlank { "Provider ${selectedIndex + 1}" },
             baseUrl = b.etBase.text?.toString().orEmpty(),
             apiKey = b.etKey.text?.toString().orEmpty(),

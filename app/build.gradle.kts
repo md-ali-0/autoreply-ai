@@ -13,8 +13,8 @@ android {
         applicationId = "com.claw.autoreplyai"
         minSdk = 28
         targetSdk = 35
-        versionCode = 55
-        versionName = "1.52.4"
+        versionCode = 56
+        versionName = "1.52.5"
     }
 
     /**

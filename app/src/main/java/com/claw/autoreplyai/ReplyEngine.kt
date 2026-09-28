@@ -230,6 +230,49 @@ object ReplyEngine {
     private fun pendingKeys(): List<String> = synchronized(queueLock) { pending.keys.toList() }
 
     /**
+     * Process-death test support — see `EXTRA_PENDINGTEST` in `MainActivity`.
+     *
+     * These two exist so the persisted queue can be exercised on a real device with
+     * `am force-stop`, which is the only way to prove the queue survives a process
+     * being killed outright — no `onDestroy`, no final flush, nothing but what was
+     * already on disk.
+     *
+     * [seedPendingForTest] goes through the production [enqueue], so the fixture is
+     * written by the same code that writes real entries and cannot drift from it.
+     */
+    fun seedPendingForTest(app: Context, key: ConversationKey, sender: String, message: String) {
+        val now = System.currentTimeMillis()
+        enqueue(
+            app,
+            key,
+            Pending(
+                pkg = key.packageName,
+                sender = sender,
+                message = message,
+                phoneHint = null,
+                direct = null,
+                contentIntent = null,
+                postTime = now,
+                queuedAt = now,
+                key = key
+            )
+        )
+    }
+
+    /** Returns `(inMemory, onDisk)` counts, so a restore that did nothing is visible. */
+    fun pendingStateForTest(app: Context): Pair<Int, Int> {
+        val inMemory = synchronized(queueLock) { pending.size }
+        val onDisk = try {
+            val raw = app.getSharedPreferences(PENDING_FILE, Context.MODE_PRIVATE)
+                .getString(PENDING_KEY, null)
+            if (raw.isNullOrBlank()) 0 else JSONArray(raw).length()
+        } catch (e: Exception) {
+            -1
+        }
+        return inMemory to onDisk
+    }
+
+    /**
      * Where the queue is mirrored so it survives the process being killed. Android
      * reclaims a backgrounded app freely; losing a queued reply to memory pressure
      * means the contact is simply never answered.

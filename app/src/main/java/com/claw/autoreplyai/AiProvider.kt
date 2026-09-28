@@ -3,15 +3,26 @@ package com.claw.autoreplyai
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * A saved AI provider profile: name + endpoint + key + model.
+ *
+ * [id] is a stable identity that survives editing, reordering and re-storing. It exists
+ * because the API key is held out of this object's JSON (see [toJson]) and stored in
+ * [SecurePrefs] under a *name* — and naming that secret by list position made the name
+ * a lie the moment the list moved. Deleting the first of three providers shifted the
+ * other two down a slot, so their keys had to be rewritten to follow, and any write
+ * that failed part-way left a key attached to the wrong profile. Keying on [id]
+ * removes the whole class of bug: a profile's key is reachable from the profile
+ * itself, not from wherever it happens to sit in a list.
  */
 data class AiProvider(
     val name: String,
     val baseUrl: String,
     val apiKey: String,
-    val model: String
+    val model: String,
+    val id: String = newId()
 ) {
     /**
      * Serialise this profile for storage in the provider list.
@@ -30,6 +41,7 @@ data class AiProvider(
      */
     fun toJson(includeSecret: Boolean = false): JSONObject {
         val o = JSONObject()
+        o.put("id", id)
         o.put("name", name)
         o.put("baseUrl", baseUrl)
         if (includeSecret) o.put("apiKey", apiKey)
@@ -38,8 +50,15 @@ data class AiProvider(
     }
 
     companion object {
+        /** A fresh identity. Random, so two devices merging lists cannot collide. */
+        fun newId(): String = UUID.randomUUID().toString()
+
         fun fromJson(o: JSONObject): AiProvider {
             return AiProvider(
+                // A profile written before `id` existed gets one now. It is only ever
+                // compared against itself, so a value minted at read time is stable
+                // enough — the same read mints it once and it is written straight back.
+                id = o.optString("id").takeIf { it.isNotBlank() } ?: newId(),
                 name = o.optString("name", ""),
                 baseUrl = o.optString("baseUrl", ""),
                 apiKey = o.optString("apiKey", ""),
@@ -66,6 +85,12 @@ object AiProviderStore {
     private const val KEY_SELECTED = "selected"
 
     /**
+     * Every secure-store name this store owns starts with this. Used to find orphans
+     * after a delete without knowing which ids are on disk.
+     */
+    private const val SECRET_PREFIX = "providerApiKey_"
+
+    /**
      * Hosts we never call, even if a profile for one is already on the device or
      * arrives through a restored backup.
      *
@@ -82,14 +107,19 @@ object AiProviderStore {
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /**
-     * SecurePrefs name for one provider's key, addressed by its position in the list.
+     * SecurePrefs name for one provider's key, addressed by the profile's stable [id].
      *
-     * Indexed by position because that is what the whole store is already keyed on —
-     * `selected` is an index, and every read path resolves a profile by its slot. A key
-     * therefore moves with the profile when the user reorders or deletes, so [save] has
-     * to rewrite the whole key set on every write, which it does.
+     * Previously this was `providerApiKey_<slot>` — the profile's position in the list.
+     * Position is not identity: deleting the first of three profiles shifted the others
+     * down a slot, so their keys had to be rewritten to follow the move, and every write
+     * had to rewrite the entire key set just to stay consistent. A failed write in the
+     * middle of that left keys attached to the wrong profiles. Keyed by id, a key never
+     * has to move, and [save] touches only the profile that actually changed.
      */
-    private fun secretName(index: Int) = "providerApiKey_$index"
+    private fun secretName(id: String) = SECRET_PREFIX + id
+
+    /** The old slot-based name, still read once so existing keys are not orphaned. */
+    private fun legacySecretName(index: Int) = "providerApiKey_$index"
 
     /** True when this profile points at a host we have retired. */
     fun isBlocked(p: AiProvider): Boolean {
@@ -105,12 +135,19 @@ object AiProviderStore {
     /**
      * Every stored profile, blocked ones included, with its key attached.
      *
-     * The key is read from [SecurePrefs] by the profile's **position in the stored
-     * list**, which is the same slot `save` writes to and the same thing `selected`
-     * indexes. Legacy plaintext keys (written inline by builds before v1.52.3) are
-     * migrated here, one slot at a time. A slot is only scrubbed from the list after its
-     * own migration is confirmed, so a partial Keystore failure costs nothing — the
-     * un-migrated key stays on disk and is retried on the next read.
+     * A profile's key lives in [SecurePrefs] under its own [AiProvider.id]. Two older
+     * layouts are read once and folded in:
+     *
+     *  - a plaintext `apiKey` inline in the list, written by builds before v1.52.3;
+     *  - a key under `providerApiKey_<index>`, written by v1.52.3/v1.52.4 before
+     *    profiles had an id.
+     *
+     * Migration is per-profile and each profile is scrubbed only after its **own** write
+     * is confirmed. `SecurePrefs.put` returns false when the Keystore is unavailable, and
+     * that can happen for one write and not the next, so an aggregate "did anything
+     * succeed?" check would delete the key of a profile that was never migrated. Every
+     * read falls back to whatever source still holds the key, so a failed migration reads
+     * correctly for this boot and is retried on the next.
      */
     private fun rawList(ctx: Context): List<AiProvider> {
         val raw = sp(ctx).getString(KEY_LIST, "[]") ?: "[]"
@@ -122,42 +159,50 @@ object AiProviderStore {
 
         // 1. Read every profile and collect any legacy plaintext keys in the same pass.
         val profiles = ArrayList<AiProvider>(arr.length())
-        val legacy = ArrayList<String>(arr.length())
+        val legacyInline = ArrayList<String>(arr.length())
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
             profiles.add(AiProvider.fromJson(o))
-            legacy.add(o.optString("apiKey", ""))
+            legacyInline.add(o.optString("apiKey", ""))
         }
 
-        // 2. Migrate the plaintext keys into SecurePrefs, once.
-        //
-        // Per-slot, and the scrub is per-slot too. `SecurePrefs.put` returns false when
-        // the Keystore is unavailable, and that can happen for one write and not the
-        // next. Scrubbing the whole list as soon as *any* write succeeded would delete
-        // the plaintext of a slot that was never migrated — the key would be gone from
-        // both stores, permanently. So each slot is scrubbed only after its own write
-        // was confirmed, and a slot that failed is left exactly as it was for the next
-        // attempt.
-        val migratedSlots = ArrayList<Int>()
-        for (i in legacy.indices) {
-            val key = legacy[i]
-            if (key.isBlank()) continue
-            if (SecurePrefs.put(ctx, secretName(i), key)) migratedSlots.add(i)
-        }
-        if (migratedSlots.isNotEmpty()) {
-            scrubSecrets(ctx, migratedSlots)
-            LogStore.add(ctx, "প্রোভাইডার key সুরক্ষিত স্টোরেজে সরানো হলো (${migratedSlots.size} টা)")
+        // 2. Resolve each profile's key, preferring the id-keyed slot and falling back
+        //    to the slot-numbered one, then to the inline plaintext.
+        val resolved = ArrayList<String>(profiles.size)
+        var migrated = 0
+        for ((i, p) in profiles.withIndex()) {
+            val byId = SecurePrefs.get(ctx, secretName(p.id))
+            val fromSlot = if (byId == null) SecurePrefs.get(ctx, legacySecretName(i)) else null
+            val key = byId ?: fromSlot ?: legacyInline[i]
+            resolved.add(key)
+
+            // Adopt the legacy slot name onto the stable id, but only if this profile
+            // does not already have an id-keyed secret and actually has a key to move.
+            if (byId == null && key.isNotBlank()) {
+                if (SecurePrefs.put(ctx, secretName(p.id), key)) {
+                    migrated++
+                    if (fromSlot != null) SecurePrefs.remove(ctx, legacySecretName(i))
+                }
+            }
         }
 
-        // 3. Attach the key for each profile: the migrated/persisted one if the secure
-        // store has it, otherwise the plaintext still sitting in the list. Falling back
-        // matters — without it a slot whose migration failed would read back as blank
-        // for this whole boot, and the reply pipeline would report "no provider
-        // configured" while the key was on disk the entire time.
-        return profiles.mapIndexed { i, p ->
-            val secure = SecurePrefs.get(ctx, secretName(i))
-            p.copy(apiKey = secure ?: legacy[i])
+        // 3. Scrub inline plaintext, but only for profiles whose key is now readable
+        //    from secure storage — otherwise the scrub destroys the only copy.
+        val scrub = ArrayList<Int>()
+        for ((i, p) in profiles.withIndex()) {
+            if (legacyInline[i].isBlank()) continue
+            if (SecurePrefs.get(ctx, secretName(p.id)) != null) scrub.add(i)
         }
+        if (scrub.isNotEmpty()) scrubSecrets(ctx, scrub)
+        if (migrated > 0 || scrub.isNotEmpty()) {
+            LogStore.add(
+                ctx,
+                "প্রোভাইডার key সুরক্ষিত স্টোরেজে সরানো হলো " +
+                        "(id-তে $migrated টা, প্লেইনটেক্সট মুছে ${scrub.size} টা)"
+            )
+        }
+
+        return profiles.mapIndexed { i, p -> p.copy(apiKey = resolved[i]) }
     }
 
     /**
@@ -184,12 +229,14 @@ object AiProviderStore {
     }
 
     /**
-     * Persist the whole list and each key. Returns the number of keys that could **not**
-     * be written to secure storage, so the caller can say so.
+     * Persist the whole list and each profile's key. Returns the number of keys that
+     * could **not** be written to secure storage, so the caller can say so.
      *
-     * Called with the in-memory list, which carries keys. The keys go to [SecurePrefs],
-     * the rest goes to the plain preference — and every slot is rewritten so a delete or
-     * reorder cannot leave a previous provider's key attached to a different profile.
+     * The list goes to the plain preference (never carrying keys — see
+     * [AiProvider.toJson]) and each key goes to [SecurePrefs] under its profile's own
+     * id. Because the name is derived from the profile and not from a list position, a
+     * reorder or a delete cannot leave one profile's key attached to another — there is
+     * nothing to renumber, and a profile that did not change is not rewritten at all.
      *
      * A failed write is reported rather than swallowed. Losing a key here is the user's
      * own edit not persisting, which is recoverable — but only if they are told.
@@ -203,18 +250,21 @@ object AiProviderStore {
         sp(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
 
         var failed = 0
-        for ((i, p) in clean.withIndex()) {
+        for (p in clean) {
             if (p.apiKey.isBlank()) {
-                SecurePrefs.remove(ctx, secretName(i))
-            } else if (!SecurePrefs.put(ctx, secretName(i), p.apiKey)) {
+                SecurePrefs.remove(ctx, secretName(p.id))
+            } else if (!SecurePrefs.put(ctx, secretName(p.id), p.apiKey)) {
                 failed++
-                LogStore.add(ctx, "⚠️ প্রোভাইডার key সংরক্ষণ করা যায়নি (#${i + 1})")
+                LogStore.add(ctx, "⚠️ প্রোভাইডার key সংরক্ষণ করা করা যায়নি — ${p.name.ifBlank { p.id }}")
             }
         }
-        // Clear slots beyond the new end, or a deleted provider's key would linger.
-        for (i in clean.size until clean.size + 8) {
-            if (!SecurePrefs.has(ctx, secretName(i))) break
-            SecurePrefs.remove(ctx, secretName(i))
+
+        // Drop keys belonging to profiles that are no longer in the list. Enumerated
+        // from the names actually present rather than from a slot range, since the ids
+        // are arbitrary strings and there is no "beyond the end" to walk to.
+        val live = clean.map { secretName(it.id) }.toSet()
+        for (name in SecurePrefs.namesWithPrefix(ctx, SECRET_PREFIX)) {
+            if (name !in live) SecurePrefs.remove(ctx, name)
         }
         return failed
     }

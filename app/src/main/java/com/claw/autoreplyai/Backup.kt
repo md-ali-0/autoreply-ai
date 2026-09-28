@@ -79,22 +79,30 @@ object Backup {
         // key, so the existing providers on the device are left untouched.
         //
         // Snapshots carry no `apiKey` (see `build`), so a restored profile arrives with a
-        // blank key. Where a provider on the device already matches this one — same name
-        // and endpoint — keep the key that is already in secure storage. Otherwise a
-        // routine restore would silently wipe every saved key and leave the user
-        // wondering why the bot stopped replying. A profile with no local match, or a
-        // snapshot from an older build that *does* carry a key, is taken as-is.
+        // blank key. Where a provider on the device already matches this one, keep the
+        // key that is already in secure storage. Otherwise a routine restore would
+        // silently wipe every saved key and leave the user wondering why the bot stopped
+        // replying. A profile with no local match, or a snapshot from an older build that
+        // *does* carry a key, is taken as-is.
+        //
+        // Matching is by `id` first, because that is the profile's real identity and the
+        // name it uses to reach its key. Name+endpoint is kept as the fallback for
+        // snapshots written before providers had an id — those carry no id at all, so
+        // an id-first match simply finds nothing for them and the old rule applies.
         root.optJSONArray("providers")?.let { arr ->
             val existing = AiProviderStore.all(ctx)
             val list = ArrayList<AiProvider>(arr.length())
             for (i in 0 until arr.length()) {
                 val incoming = AiProvider.fromJson(arr.getJSONObject(i))
-                val match = existing.firstOrNull {
-                    it.name == incoming.name && it.baseUrl == incoming.baseUrl
-                }
+                val match = existing.firstOrNull { it.id == incoming.id }
+                    ?: existing.firstOrNull {
+                        it.name == incoming.name && it.baseUrl == incoming.baseUrl
+                    }
                 list.add(
                     if (incoming.apiKey.isBlank() && match != null) {
-                        incoming.copy(apiKey = match.apiKey)
+                        // Adopt the local identity as well as the key, so the restored
+                        // profile keeps pointing at the secret that actually exists.
+                        incoming.copy(apiKey = match.apiKey, id = match.id)
                     } else {
                         incoming
                     }

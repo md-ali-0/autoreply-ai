@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Hosts the hero header, the bottom navigation, the per-section sub-tabs, the pager
@@ -90,6 +91,9 @@ class MainActivity : AppCompatActivity() {
         if (intent.getBooleanExtra(EXTRA_MOODTEST, false)) runMoodCheck()
         if (intent.getBooleanExtra(EXTRA_VOICETEST, false)) runVoiceCheck()
         if (intent.getBooleanExtra(EXTRA_CLOUDTEST, false)) runCloudCheck()
+        if (intent.getBooleanExtra(EXTRA_PENDINGTEST, false)) runPendingSeed()
+        if (intent.getBooleanExtra(EXTRA_PENDINGCHECK, false)) runPendingCheck()
+        if (intent.getBooleanExtra(EXTRA_LOGDUMP, false)) runLogDump()
         if (intent.getBooleanExtra(EXTRA_NAVTEST, false)) {
             // After layout: switching sections drives the pager and the nav bar, and
             // both need real views to talk to.
@@ -127,6 +131,69 @@ class MainActivity : AppCompatActivity() {
             }
         }
         LogStore.add(this, "নেভ টেস্ট: সব সেকশন ✓")
+    }
+
+    /**
+     * Stage 1 of the process-death test: write a real pending entry to disk.
+     *
+     * Uses the engine's own enqueue path (via a synthetic incoming message on a
+     * cooldown) rather than writing the JSON by hand, so what is being tested is the
+     * code that actually runs in production, not a hand-built fixture that might
+     * diverge from it.
+     */
+    private fun runPendingSeed() {
+        val key = ConversationKey("com.whatsapp", "p:pendingtest")
+        ReplyEngine.seedPendingForTest(this, key, "PendingTest", "process-death probe")
+        LogStore.add(
+            this,
+            "পেন্ডিং টেস্ট: কিউতে লেখা হলো — এখন " +
+                    "`adb shell am force-stop com.claw.autoreplyai` চালিয়ে " +
+                    "তারপর `--ez pendingcheck true` দিন"
+        )
+    }
+
+    /**
+     * Stage 2: report what `restorePending()` did after the process was killed.
+     *
+     * Read straight from the engine's in-memory queue plus the on-disk file, so the
+     * two can be compared — the failure that matters is "file still has it, memory does
+     * not", which is exactly a restore that silently did nothing.
+     */
+    private fun runPendingCheck() {
+        val (inMemory, onDisk) = ReplyEngine.pendingStateForTest(this)
+        LogStore.add(this, "পেন্ডিং চেক: ডিস্কে $onDisk টা, মেমোরিতে $inMemory টা")
+        when {
+            onDisk == 0 -> LogStore.add(this, "✗ পেন্ডিং চেক ব্যর্থ: ফাইলে কিছুই নেই (সিড হয়নি?)")
+            inMemory == 0 -> LogStore.add(this, "✗ পেন্ডিং চেক ব্যর্থ: ফাইল আছে কিন্তু restore কিছু ফেরায়নি")
+            inMemory == onDisk -> LogStore.add(this, "✓✓ পেন্ডিং চেক সফল: প্রসেস মরে যাওয়ার পরও $inMemory টা ফিরে এসেছে")
+            else -> LogStore.add(this, "⚠️ পেন্ডিং চেক: ফাইলে $onDisk, মেমোরিতে $inMemory — অমিল")
+        }
+    }
+
+    /**
+     * Dump the in-app log ring buffer to a file, so it can be read from a workstation
+     * with `adb pull` on a build that has no readable data directory.
+     *
+     * The release APK is not debuggable, so `run-as` cannot reach
+     * `shared_prefs/reply_logs.xml`. The app's own external files directory needs no
+     * permission, and is reachable at
+     * `adb pull /sdcard/Android/data/com.claw.autoreplyai/files/autoreplyai/log.txt`.
+     */
+    private fun runLogDump() {
+        try {
+            // External app dir first: it needs no permission at all, so it is the one
+            // that works on a device where All-files access was never granted.
+            val dir = File(
+                getExternalFilesDir(null) ?: filesDir,
+                "autoreplyai"
+            )
+            if (!dir.exists()) dir.mkdirs()
+            val f = File(dir, "log.txt")
+            f.writeText(LogStore.read(this).joinToString("\n"))
+            LogStore.add(this, "লগ ডাম্প: ${f.absolutePath} (${f.length()} বাইট)")
+        } catch (e: Exception) {
+            LogStore.add(this, "লগ ডাম্প ব্যর্থ: ${e.javaClass.simpleName} — ${e.message}")
+        }
     }
 
     /** Headless cloud-backup check: uploads the current snapshot and logs the result. */
@@ -219,6 +286,27 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_CLOUDTEST = "cloudtest"
         const val EXTRA_NAVTEST = "navtest"
         const val EXTRA_MOODTEST = "moodtest"
+
+        /**
+         * Two-stage process-death test for the persisted pending queue.
+         *
+         * Stage 1 (`pendingtest true`) writes a real pending entry to disk.
+         * Stage 2 (`pendingcheck true`) is run *after* `am force-stop`, and reports
+         * whether `restorePending()` found it and re-armed delivery.
+         *
+         * This is the one behaviour in the app that source review cannot settle: the
+         * queue is only interesting if it survives the process actually dying, and
+         * `force-stop` is the harshest version of that (no `onDestroy`, no final flush).
+         */
+        const val EXTRA_PENDINGTEST = "pendingtest"
+        const val EXTRA_PENDINGCHECK = "pendingcheck"
+
+        /**
+         * Writes the log ring buffer to `/sdcard/autoreplyai/log.txt`. The release APK
+         * is not debuggable, so this is the only way to get the in-app log off the
+         * device without a screen reader or a screenshot.
+         */
+        const val EXTRA_LOGDUMP = "logdump"
 
         /** Bottom-navigation menu id for each section, indexed by section. */
         val SECTION_MENU_ID = intArrayOf(
