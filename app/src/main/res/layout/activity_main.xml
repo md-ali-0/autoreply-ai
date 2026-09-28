@@ -70,10 +70,13 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/moodPill"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:background="@drawable/bg_hero_pill"
+            android:clickable="true"
+            android:focusable="true"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="14dp"
@@ -99,6 +102,7 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/tvMoodLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/mood_sleeping"
@@ -113,6 +117,58 @@
                 app:thumbTint="@color/switch_thumb"
                 app:trackDecorationTint="@android:color/transparent"
                 app:trackTint="@color/switch_track" />
+        </LinearLayout>
+
+        <!-- Quick mood editor: appears when mood pill is tapped -->
+        <LinearLayout
+            android:id="@+id/moodEditor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:animateLayoutChanges="true"
+            android:background="@drawable/bg_hero_pill"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:visibility="gone">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/mood_text_hint"
+                app:boxStrokeColor="@color/hero_text_dim"
+                app:hintTextColor="@color/hero_text_dim">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etQuickMood"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="@color/hero_text_dim"
+                    android:textSize="14sp" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/mood_assistant_hint"
+                app:boxStrokeColor="@color/hero_text_dim"
+                app:hintTextColor="@color/hero_text_dim">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etQuickAssistant"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="@color/hero_text_dim"
+                    android:textSize="14sp" />
+            </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
     </LinearLayout>
 

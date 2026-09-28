@@ -13,6 +13,7 @@ import androidx.core.view.updatePadding
 import androidx.viewpager2.widget.ViewPager2
 import com.claw.autoreplyai.databinding.ActivityMainBinding
 import com.google.android.material.tabs.TabLayout
+import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         b.switchEnabled.isChecked = p.enabled
         b.switchMood.isChecked = p.moodEnabled
         bindHero()
+        bindMoodEditor()
         refreshHero()
 
         // Headless self tests, so they can be run while the phone is locked:
@@ -357,6 +359,21 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
 
+        // Tapping the mood pill opens a quick editor right in the hero — no need to
+        // navigate to মানুষ → কন্টেক্সট just to change "এখন কী করছি".
+        b.moodPill.setOnClickListener {
+            if (b.moodEditor.visibility == View.VISIBLE) {
+                saveMoodEditor()
+                b.moodEditor.visibility = View.GONE
+            } else {
+                b.etQuickMood.setText(p.moodText)
+                b.etQuickAssistant.setText(p.assistantName)
+                b.moodEditor.visibility = View.VISIBLE
+                b.etQuickMood.requestFocus()
+                b.etQuickMood.setSelection(b.etQuickMood.text?.length ?: 0)
+            }
+        }
+
         b.btnSave.setOnClickListener {
             saveAllTabs()
             refreshHero()
@@ -380,5 +397,34 @@ class MainActivity : AppCompatActivity() {
             })
         )
         b.tvHeroModel.text = p.model.ifBlank { getString(R.string.hero_subtitle) }
+        b.tvMoodLabel.text = if (moodOn) p.moodText else getString(R.string.mood_sleeping)
+    }
+
+    // ------------------------------------------------------------ mood editor
+
+    /**
+     * The quick mood editor in the hero: typing here saves on focus loss or when
+     * the pill is tapped to collapse. No Save button, no navigation.
+     */
+    private fun bindMoodEditor() {
+        // Save when focus leaves either field — the user is done typing.
+        val saveOnFocusLoss = View.OnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) saveMoodEditor()
+        }
+        b.etQuickMood.onFocusChangeListener = saveOnFocusLoss
+        b.etQuickAssistant.onFocusChangeListener = saveOnFocusLoss
+    }
+
+    private fun saveMoodEditor() {
+        val mood = b.etQuickMood.text?.toString()?.trim().orEmpty().ifBlank { "ঘুমাচ্ছে" }
+        val name = b.etQuickAssistant.text?.toString()?.trim().orEmpty().ifBlank { "ক্ল" }
+        if (mood != p.moodText || name != p.assistantName) {
+            p.moodText = mood
+            p.assistantName = name
+            LogStore.add(this, "মুড বদলানো হলো: $name · $mood")
+            refreshHero()
+            // The Context tab also shows these fields — refresh it.
+            (fragmentAt(TabsAdapter.TAB_CONTEXT) as? ContextFragment)?.reloadIfReady()
+        }
     }
 }
