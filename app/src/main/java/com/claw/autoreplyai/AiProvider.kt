@@ -14,14 +14,21 @@ data class AiProvider(
     val model: String
 ) {
     /**
-     * Serialise this profile.
+     * Serialise this profile for storage in the provider list.
      *
-     * [includeSecret] exists for the backup path. A backup file is written to the
-     * user's Downloads folder and can be uploaded to a server, so it must not carry
-     * credentials — `Prefs.exportJson()` already strips its three secret keys for the
-     * same reason, and the provider list is the other place a key could escape.
+     * The API key is deliberately **not** written here by default. The provider list
+     * lives in ordinary `SharedPreferences`, which is readable by anything that can
+     * read the app's data directory — while `Prefs.apiKey`, `transcribeApiKey` and
+     * `cloudToken` all go through [SecurePrefs]. Leaving the per-provider keys in the
+     * clear made the protection inconsistent: the same class of secret was encrypted in
+     * one place and plaintext in another. `AiProviderStore` now keeps each key in
+     * [SecurePrefs] and re-attaches it on read.
+     *
+     * [includeSecret] remains for one purpose: writing a snapshot that is explicitly
+     * meant to carry credentials. Nothing calls it with `true` any more; backups and
+     * storage both exclude the key.
      */
-    fun toJson(includeSecret: Boolean = true): JSONObject {
+    fun toJson(includeSecret: Boolean = false): JSONObject {
         val o = JSONObject()
         o.put("name", name)
         o.put("baseUrl", baseUrl)
@@ -74,6 +81,16 @@ object AiProviderStore {
     private fun sp(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /**
+     * SecurePrefs name for one provider's key, addressed by its position in the list.
+     *
+     * Indexed by position because that is what the whole store is already keyed on —
+     * `selected` is an index, and every read path resolves a profile by its slot. A key
+     * therefore moves with the profile when the user reorders or deletes, so [save] has
+     * to rewrite the whole key set on every write, which it does.
+     */
+    private fun secretName(index: Int) = "providerApiKey_$index"
+
     /** True when this profile points at a host we have retired. */
     fun isBlocked(p: AiProvider): Boolean {
         val url = p.baseUrl.lowercase()
@@ -81,25 +98,100 @@ object AiProviderStore {
     }
 
     fun all(ctx: Context): List<AiProvider> {
-        val raw = sp(ctx).getString(KEY_LIST, "[]") ?: "[]"
-        val arr = JSONArray(raw)
-        val out = mutableListOf<AiProvider>()
-        for (i in 0 until arr.length()) {
-            val p = AiProvider.fromJson(arr.getJSONObject(i))
-            if (!isBlocked(p)) out.add(p)
-        }
-        return out
+        val raw = rawList(ctx)
+        return raw.filterNot { isBlocked(it) }
     }
 
-    /** Every stored profile, blocked ones included. Used only for index arithmetic. */
+    /**
+     * Every stored profile, blocked ones included, with its key attached.
+     *
+     * The key is read from [SecurePrefs] by the profile's **position in the stored
+     * list**, which is the same slot `save` writes to and the same thing `selected`
+     * indexes. Doing this in one pass (rather than a migration per entry) means the
+     * plaintext scrub happens once, not once per provider.
+     */
     private fun rawList(ctx: Context): List<AiProvider> {
         val raw = sp(ctx).getString(KEY_LIST, "[]") ?: "[]"
-        val arr = JSONArray(raw)
-        val out = mutableListOf<AiProvider>()
-        for (i in 0 until arr.length()) {
-            out.add(AiProvider.fromJson(arr.getJSONObject(i)))
+        val arr = try {
+            JSONArray(raw)
+        } catch (e: Exception) {
+            return emptyList()
         }
-        return out
+
+        // 1. Read every profile and collect any legacy plaintext keys in the same pass.
+        val profiles = ArrayList<AiProvider>(arr.length())
+        val legacy = ArrayList<String>(arr.length())
+        var sawPlaintext = false
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val p = AiProvider.fromJson(o)
+            profiles.add(p)
+            val inline = o.optString("apiKey", "")
+            legacy.add(inline)
+            if (inline.isNotBlank()) sawPlaintext = true
+        }
+
+        // 2. Migrate the plaintext keys into SecurePrefs, once.
+        if (sawPlaintext) {
+            var migrated = 0
+            for (i in legacy.indices) {
+                val key = legacy[i]
+                if (key.isBlank()) continue
+                if (SecurePrefs.put(ctx, secretName(i), key)) migrated++
+            }
+            if (migrated > 0) {
+                rewriteWithoutSecrets(ctx)
+                LogStore.add(ctx, "প্রোভাইডার key সুরক্ষিত স্টোরেজে সরানো হলো ($migrated টা)")
+            }
+        }
+
+        // 3. Attach whatever is now in secure storage (migrated or previously stored).
+        return profiles.mapIndexed { i, p ->
+            p.copy(apiKey = SecurePrefs.get(ctx, secretName(i)).orEmpty())
+        }
+    }
+
+    /** Rewrite the stored list, dropping any `apiKey` field left by an older build. */
+    private fun rewriteWithoutSecrets(ctx: Context) {
+        try {
+            val raw = sp(ctx).getString(KEY_LIST, "[]") ?: "[]"
+            val arr = JSONArray(raw)
+            val clean = JSONArray()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                o.remove("apiKey")
+                clean.put(o)
+            }
+            sp(ctx).edit().putString(KEY_LIST, clean.toString()).apply()
+        } catch (e: Exception) {
+            // Best effort — a failure leaves the list readable, just not yet scrubbed.
+        }
+    }
+
+    /**
+     * Persist the whole list and each key.
+     *
+     * Called with the in-memory list, which carries keys. The keys go to [SecurePrefs],
+     * the rest goes to the plain preference — and every slot is rewritten so a delete or
+     * reorder cannot leave a previous provider's key attached to a different profile.
+     */
+    fun save(ctx: Context, list: List<AiProvider>) {
+        // A blocked host can never be written back, whatever the caller passes.
+        val clean = list.filterNot { isBlocked(it) }
+
+        val arr = JSONArray()
+        clean.forEach { arr.put(it.toJson(includeSecret = false)) }
+        sp(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
+
+        for ((i, p) in clean.withIndex()) {
+            if (p.apiKey.isBlank()) SecurePrefs.remove(ctx, secretName(i))
+            else SecurePrefs.put(ctx, secretName(i), p.apiKey)
+        }
+        // Clear slots beyond the new end, or a deleted provider's key would linger.
+        for (i in clean.size until clean.size + 8) {
+            if (!SecurePrefs.has(ctx, secretName(i))) break
+            SecurePrefs.remove(ctx, secretName(i))
+        }
     }
 
     private fun rawListStoredIndex(ctx: Context): Int =
@@ -123,14 +215,6 @@ object AiProviderStore {
         } else {
             setSelected(ctx, 0)
         }
-    }
-
-    fun save(ctx: Context, list: List<AiProvider>) {
-        // A blocked host can never be written back, whatever the caller passes.
-        val clean = list.filterNot { isBlocked(it) }
-        val arr = JSONArray()
-        clean.forEach { arr.put(it.toJson()) }
-        sp(ctx).edit().putString(KEY_LIST, arr.toString()).apply()
     }
 
     fun selectedIndex(ctx: Context): Int {

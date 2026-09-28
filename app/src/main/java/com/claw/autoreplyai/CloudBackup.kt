@@ -39,6 +39,13 @@ object CloudBackup {
     private const val MAX_DOWNLOAD_BYTES = 16_000_000L
 
     /**
+     * Ceiling on a control response — the upload acknowledgement, an error body. These
+     * are a few hundred bytes by design; 1 MB is the same limit the chat client applies
+     * to a completion, and reading one is the only thing that happens here.
+     */
+    private const val MAX_RESPONSE_BYTES = 1_000_000L
+
+    /**
      * Read at most [limit] bytes from a response body, then fail loudly rather than
      * silently truncating — a half-read backup would otherwise look like a valid file.
      */
@@ -87,7 +94,10 @@ object CloudBackup {
                 .build()
 
             client.newCall(request).execute().use { resp ->
-                val raw = resp.body?.string().orEmpty()
+                // Bounded like the download path. The reply to an upload is meant to be
+                // a few bytes, but "meant to be" is exactly the assumption that lets a
+                // wrong `cloudUrl` or a misbehaving server hand back something huge.
+                val raw = readBounded(resp.body, MAX_RESPONSE_BYTES)
                 if (!resp.isSuccessful) {
                     return Outcome(false, describe(resp.code, raw))
                 }

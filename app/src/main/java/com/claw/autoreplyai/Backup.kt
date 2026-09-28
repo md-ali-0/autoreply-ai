@@ -78,13 +78,27 @@ object Backup {
         // Restore the full provider list (v2+). v1 snapshots have no "providers"
         // key, so the existing providers on the device are left untouched.
         //
-        // Snapshots written from v1.52.2 on carry no `apiKey` (see `build`), so the
-        // restored profile has a blank key and the user re-enters it once. Older
-        // snapshots may still contain one — honour it rather than dropping the field.
+        // Snapshots carry no `apiKey` (see `build`), so a restored profile arrives with a
+        // blank key. Where a provider on the device already matches this one — same name
+        // and endpoint — keep the key that is already in secure storage. Otherwise a
+        // routine restore would silently wipe every saved key and leave the user
+        // wondering why the bot stopped replying. A profile with no local match, or a
+        // snapshot from an older build that *does* carry a key, is taken as-is.
         root.optJSONArray("providers")?.let { arr ->
+            val existing = AiProviderStore.all(ctx)
             val list = ArrayList<AiProvider>(arr.length())
             for (i in 0 until arr.length()) {
-                list.add(AiProvider.fromJson(arr.getJSONObject(i)))
+                val incoming = AiProvider.fromJson(arr.getJSONObject(i))
+                val match = existing.firstOrNull {
+                    it.name == incoming.name && it.baseUrl == incoming.baseUrl
+                }
+                list.add(
+                    if (incoming.apiKey.isBlank() && match != null) {
+                        incoming.copy(apiKey = match.apiKey)
+                    } else {
+                        incoming
+                    }
+                )
             }
             if (list.isNotEmpty()) {
                 AiProviderStore.save(ctx, list)
