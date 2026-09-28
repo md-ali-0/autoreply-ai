@@ -185,7 +185,11 @@ class WhatsAppNotificationListener : NotificationListenerService() {
             pkg,
             phone = phoneHint,
             identity = sbn.key,
-            sender = title
+            sender = title,
+            // The same person shows up as "+880 1711-000000" in one notification and a
+            // bare local number in the next; the country code is what lets those fold
+            // into one identity instead of two buckets.
+            countryCode = Prefs.get(applicationContext).countryCode
         )
 
         // Skip our own replies — the chat app posts a new notification when we send

@@ -73,7 +73,13 @@ object ReplyEngine {
         val app = ctx.applicationContext
         val p = Prefs.get(app)
         val key = keyOverride
-            ?: ConversationKey.of(pkg, phone = phoneHint, identity = conversationIdentity, sender = sender)
+            ?: ConversationKey.of(
+                pkg,
+                phone = phoneHint,
+                identity = conversationIdentity,
+                sender = sender,
+                countryCode = p.countryCode
+            )
         val addr = key.storageKey
 
         if (!p.enabled) return
@@ -189,9 +195,6 @@ object ReplyEngine {
          */
         val key: ConversationKey
     )
-
-    private fun pendingKey(pkg: String, sender: String, phoneHint: String?, key: ConversationKey?): ConversationKey =
-        key ?: ConversationKey.of(pkg, phone = phoneHint, sender = sender)
 
     private val pending = HashMap<String, Pending>()
 
@@ -309,13 +312,19 @@ object ReplyEngine {
                         ConversationKey.of(
                             o.optString("pkg"),
                             phone = o.optString("phoneHint").takeIf { it.isNotBlank() },
-                            sender = sender
+                            sender = sender,
+                            countryCode = Prefs.get(app).countryCode
                         )
                     }
 
-                    // Never let a stale entry overwrite one that a live message already
-                    // re-queued under the same key while we were reading.
-                    val addr = o.optString("addr").takeIf { it.isNotBlank() } ?: key.storageKey
+                    // The stored `addr` is only a hint. It is a hash of an identity that
+                    // may no longer be what `key` resolves to — a v1.51 entry predates
+                    // this field, and a v1.52 entry written before the country code was
+                    // set resolved a bare local number differently. Keying the queue by
+                    // a stale `addr` while cooldown and memory lookups use `key` would
+                    // leave the entry unreachable by its own conversation, so derive the
+                    // address from the key and never trust the file.
+                    val addr = key.storageKey
                     if (pending.containsKey(addr)) continue
 
                     pending[addr] = Pending(

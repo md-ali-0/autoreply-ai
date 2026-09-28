@@ -62,14 +62,17 @@ data class ConversationKey(
          * @param phone    a phone number, if the notification exposed one
          * @param identity the notification's own key/tag — a stable per-thread handle
          * @param sender   the display name, the weakest but always-present identity
+         * @param countryCode the user's country calling code, so a bare local number
+         *                resolves to the same identity as its international form
          */
         fun of(
             pkg: String,
             phone: String? = null,
             identity: String? = null,
-            sender: String? = null
+            sender: String? = null,
+            countryCode: String? = null
         ): ConversationKey {
-            val id = normalizePhone(phone)
+            val id = normalizePhone(phone, countryCode)
                 ?: identity?.trim()?.takeIf { it.isNotEmpty() }?.let { "$KIND_NOTIF:$it" }
                 ?: sender?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { "$KIND_NAME:$it" }
                 ?: UNKNOWN
@@ -77,20 +80,42 @@ data class ConversationKey(
         }
 
         /**
-         * Numbers arrive formatted a dozen ways ("+880 1711-000000", "01711 000000").
-         * Keep a leading +, strip everything else that is not a digit, so the same
-         * person yields the same identity however the notification happened to
-         * present them.
+         * Numbers arrive formatted a dozen ways, and — this is the part that bites —
+         * the *same person* is not presented consistently even within one app. A
+         * notification may show "+880 1711-000000" while the sender record for the
+         * same thread carries "01711 000000". Stored as-is those are two identities,
+         * so the same person gets two memory buckets and two cooldowns.
+         *
+         * So canonicalise rather than merely tidy: keep digits, then fold a local
+         * number into international form using the configured country code. A number
+         * that already carries a country code (or is given with an explicit +) is
+         * left alone. The result never keeps a `+` — it is implied by the country
+         * code, and keeping it makes "+880…" and "880…" two keys again.
+         *
+         * @param countryCode the user's own country calling code, digits only
          */
-        private fun normalizePhone(raw: String?): String? {
+        private fun normalizePhone(raw: String?, countryCode: String?): String? {
             val s = raw?.trim().orEmpty()
             if (s.isEmpty()) return null
-            val plus = s.startsWith("+")
-            val digits = s.filter { it.isDigit() }
+
+            // A number written with an explicit + is already international.
+            val explicitIntl = s.startsWith("+")
+            var digits = s.filter { it.isDigit() }
             // A handful of digits is a short code or a housekeeping fragment, not
             // somebody's number — refusing it keeps noise out of the phone namespace.
             if (digits.length < 7) return null
-            return "$KIND_PHONE:${if (plus) "+" else ""}$digits"
+
+            val cc = countryCode?.filter { it.isDigit() }.orEmpty()
+            if (cc.isNotEmpty() && !explicitIntl) {
+                // "017…" with country code 880 -> "88017…". Only when the number is
+                // not already carrying that code, so an already-international number
+                // that happens to start with the digits is not double-prefixed.
+                val trunkStripped = if (digits.startsWith("0")) digits.substring(1) else digits
+                if (!digits.startsWith(cc)) {
+                    digits = cc + trunkStripped
+                }
+            }
+            return "$KIND_PHONE:$digits"
         }
 
         private fun sha256(s: String): String {
