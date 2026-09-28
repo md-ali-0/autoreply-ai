@@ -10,6 +10,8 @@ import kotlin.random.Random
  */
 class Prefs private constructor(ctx: Context) {
 
+    private val ctx: Context = ctx.applicationContext
+
     private val sp: SharedPreferences =
         ctx.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -23,9 +25,13 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getString("baseUrl", DEFAULT_BASE) ?: DEFAULT_BASE
         set(v) = sp.edit().putString("baseUrl", v.trim()).apply()
 
+    /**
+     * Keystore-backed. Returns "" when unset or when the Keystore entry is gone,
+     * so callers keep their existing "not configured" handling unchanged.
+     */
     var apiKey: String
-        get() = sp.getString("apiKey", "") ?: ""
-        set(v) = sp.edit().putString("apiKey", v.trim()).apply()
+        get() = SecurePrefs.get(ctx, SecurePrefs.Names.API_KEY).orEmpty()
+        set(v) { SecurePrefs.put(ctx, SecurePrefs.Names.API_KEY, v.trim()) }
 
     var model: String
         get() = sp.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
@@ -106,9 +112,10 @@ class Prefs private constructor(ctx: Context) {
         set(v) = sp.edit().putString("transcribeBaseUrl", v.trim()).apply()
 
     /** Key for [transcribeBaseUrl]; blank falls back to the chat provider's key. */
+    /** Keystore-backed — see [apiKey]. */
     var transcribeApiKey: String
-        get() = sp.getString("transcribeApiKey", "") ?: ""
-        set(v) = sp.edit().putString("transcribeApiKey", v.trim()).apply()
+        get() = SecurePrefs.get(ctx, SecurePrefs.Names.TRANSCRIBE_API_KEY).orEmpty()
+        set(v) { SecurePrefs.put(ctx, SecurePrefs.Names.TRANSCRIBE_API_KEY, v.trim()) }
 
     /**
      * ISO-639-1 hint for the transcriber, or blank to let Whisper detect it.
@@ -276,11 +283,17 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getInt("replyMaxChars", 90)
         set(v) = sp.edit().putInt("replyMaxChars", v.coerceIn(20, 500)).apply()
 
-    // ---------- per-contact cooldown bookkeeping ----------
-    fun lastReply(contact: String): Long = sp.getLong("last_" + contact.lowercase(), 0L)
+    // ---------- per-conversation cooldown bookkeeping ----------
 
-    fun setLastReply(contact: String, at: Long) {
-        sp.edit().putLong("last_" + contact.lowercase(), at).apply()
+    /**
+     * Cooldown is tracked per *conversation*, not per name. Two people called "Rahim"
+     * on two apps are two conversations, and sharing one cooldown meant a message to
+     * one of them could be silently held because the other had just been answered.
+     */
+    fun lastReply(key: ConversationKey): Long = sp.getLong("last_" + key.storageKey, 0L)
+
+    fun setLastReply(key: ConversationKey, at: Long) {
+        sp.edit().putLong("last_" + key.storageKey, at).apply()
     }
 
     // ------------------------------------------------------------ cloud backup
@@ -289,9 +302,10 @@ class Prefs private constructor(ctx: Context) {
     val cloudUrl: String get() = "https://md-ali.dev/api/v1"
 
     /** Device token issued from the admin panel. */
+    /** Keystore-backed — see [apiKey]. This one can pull every chat backup. */
     var cloudToken: String
-        get() = sp.getString("cloudToken", "") ?: ""
-        set(v) = sp.edit().putString("cloudToken", v.trim()).apply()
+        get() = SecurePrefs.get(ctx, SecurePrefs.Names.CLOUD_TOKEN).orEmpty()
+        set(v) { SecurePrefs.put(ctx, SecurePrefs.Names.CLOUD_TOKEN, v.trim()) }
 
     /** Upload a snapshot automatically once a day. */
     var cloudAutoUpload: Boolean
@@ -308,10 +322,43 @@ class Prefs private constructor(ctx: Context) {
     // ------------------------------------------------------------ backup
 
     /** Every stored setting, so a backup never silently misses a new key. */
+    /**
+     * Settings for the backup payload — everything except the secrets.
+     *
+     * This used to copy every key in the preference file, which quietly included
+     * `apiKey`, `transcribeApiKey` and `cloudToken`. Those now live in [SecurePrefs]
+     * and are not readable from here at all, but the plaintext copies left behind by
+     * older versions are explicitly skipped too — otherwise upgrading would keep
+     * exporting them forever. A device that never syncs its secrets cannot leak them.
+     */
     fun exportJson(): JSONObject {
         val o = JSONObject()
-        for ((k, v) in sp.all) o.put(k, v)
+        for ((k, v) in sp.all) {
+            if (k in SECRET_KEYS) continue
+            o.put(k, v)
+        }
         return o
+    }
+
+    /**
+     * Move any pre-existing plaintext secrets into the Keystore-backed store and
+     * delete the originals. Safe to call repeatedly.
+     */
+    fun migrateSecretsToKeystore() {
+        SecurePrefs.migrate(ctx, SecurePrefs.Names.API_KEY, sp.getString("apiKey", "").orEmpty())
+        SecurePrefs.migrate(
+            ctx,
+            SecurePrefs.Names.TRANSCRIBE_API_KEY,
+            sp.getString("transcribeApiKey", "").orEmpty()
+        )
+        SecurePrefs.migrate(
+            ctx,
+            SecurePrefs.Names.CLOUD_TOKEN,
+            sp.getString("cloudToken", "").orEmpty()
+        )
+        // Drop the plaintext originals whether or not the move succeeded — leaving them
+        // would mean the secret is still sitting in the file we just stopped reading.
+        sp.edit().remove("apiKey").remove("transcribeApiKey").remove("cloudToken").apply()
     }
 
     fun importJson(o: JSONObject) {
@@ -332,6 +379,9 @@ class Prefs private constructor(ctx: Context) {
         private const val FILE = "autoreply_prefs"
         private const val DEFAULT_BASE = "https://api.openai.com/v1"
         private const val DEFAULT_MODEL = "gpt-4o-mini"
+
+        /** Never exported, never backed up. See [exportJson]. */
+        private val SECRET_KEYS = setOf("apiKey", "transcribeApiKey", "cloudToken")
 
         val DEFAULT_PERSONA = """
             তুমি আলী। অফিসে কাজ করো, হাতে সময় কম।

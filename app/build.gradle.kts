@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.claw.autoreplyai"
     compileSdk = 35
@@ -15,17 +17,59 @@ android {
         versionName = "1.51"
     }
 
+    /**
+     * Release signing reads from keystore.properties, which is deliberately NOT in
+     * version control (see .gitignore) — a keystore and its passwords must never be
+     * committed. When the file is absent the release build falls back to the debug
+     * key so `assembleRelease` still runs on a fresh clone; the build prints a loud
+     * warning in that case, because a debug-signed release is not distributable and
+     * is NOT debuggable-safe.
+     */
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    val hasReleaseKeystore = keystorePropsFile.exists()
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                val props = Properties().apply {
+                    keystorePropsFile.inputStream().use { load(it) }
+                }
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
-        release {
+        debug {
+            // Debugging stays exactly as it was: debuggable, so the live state can be
+            // inspected with `adb shell run-as` while tuning on a real device.
             isMinifyEnabled = false
-            // Personal sideloaded app: staying debuggable lets us inspect the live
-            // SharedPreferences with `adb shell run-as` while tuning it.
             isDebuggable = true
+        }
+
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // Never debuggable, and never signed with the shared debug key. The debug
+            // key is public — anyone can sign a "release" with it, so shipping that way
+            // means the app can be impersonated and its data read over adb.
+            isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "⚠️  keystore.properties পাওয়া যায়নি — release বিল্ড debug key দিয়ে " +
+                            "সাইন হচ্ছে। এটা বিতরণের জন্য নয়।"
+                )
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 

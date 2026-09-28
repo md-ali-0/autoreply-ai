@@ -44,12 +44,54 @@ object ChatMemory {
     private fun sp(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    private fun keyFor(contact: String) = "h_" + contact.lowercase().hashCode().toString()
+    /**
+     * Key for a conversation.
+     *
+     * Previously `"h_" + contact.lowercase().hashCode()`, which merged the same display
+     * name across different apps into one bucket — "Ali" on WhatsApp and "Ali" on
+     * Messenger shared a history, so the model could answer one person using the other
+     * person's conversation. Now scoped by app and by a stable conversation identity.
+     */
+    private fun keyFor(app: String, key: ConversationKey) = "c_" + key.storageKey
+
+    /** The pre-v1.52 key scheme, kept only so existing history can be migrated. */
+    private fun legacyKeyFor(name: String) = "h_" + name.lowercase().hashCode().toString()
+
+    /** How many buckets migrated, for the one-line log after a migration pass. */
+    var lastMigrationCount: Int = 0
+        private set
+
+    /**
+     * Carry an existing name-keyed bucket over to its conversation key, once.
+     *
+     * Without this the ageing work in v1.51 would look like data loss: every stored
+     * history would still be on disk, addressable by a key nothing reads any more.
+     * The legacy bucket is deleted after copying so this is not repeated.
+     */
+    private fun migrate(ctx: Context, key: ConversationKey, legacyName: String, newKey: String) {
+        try {
+            val old = legacyKeyFor(legacyName)
+            if (old == newKey) return
+            val edit = sp(ctx).edit()
+            val existing = sp(ctx).getString(newKey, null)
+            val carry = sp(ctx).getString(old, null)
+            if (carry != null && existing == null) {
+                edit.putString(newKey, carry)
+                lastMigrationCount++
+            }
+            if (carry != null) edit.remove(old)
+            edit.apply()
+        } catch (e: Exception) {
+            // A failed migration must never block a reply — worst case the history
+            // starts fresh, which is exactly what the old code did anyway.
+        }
+    }
 
     private class Turn(val role: String, val content: String, val at: Long)
 
-    private fun load(ctx: Context, contact: String): List<Turn> {
-        val raw = sp(ctx).getString(keyFor(contact), null) ?: return emptyList()
+    private fun load(ctx: Context, key: ConversationKey, legacyName: String? = null): List<Turn> {
+        if (legacyName != null) migrate(ctx, key, legacyName, keyFor(FILE, key))
+        val raw = sp(ctx).getString(keyFor(FILE, key), null) ?: return emptyList()
         return try {
             val arr = JSONArray(raw)
             val out = ArrayList<Turn>(arr.length())
@@ -72,12 +114,12 @@ object ChatMemory {
     }
 
     /**
-     * Recent turns for this contact, oldest first. Anything past [MAX_AGE_MS] is
+     * Recent turns for this conversation, oldest first. Anything past [MAX_AGE_MS] is
      * omitted, and a gap marker is inserted in its place so the model knows the
      * conversation did not simply start here.
      */
-    fun history(ctx: Context, contact: String): List<AiClient.Msg> {
-        val turns = load(ctx, contact)
+    fun history(ctx: Context, key: ConversationKey, legacyName: String? = null): List<AiClient.Msg> {
+        val turns = load(ctx, key, legacyName)
         if (turns.isEmpty()) return emptyList()
 
         val now = System.currentTimeMillis()
@@ -104,9 +146,9 @@ object ChatMemory {
         return out
     }
 
-    fun add(ctx: Context, contact: String, role: String, content: String) {
+    fun add(ctx: Context, key: ConversationKey, role: String, content: String, legacyName: String? = null) {
         val now = System.currentTimeMillis()
-        val list = load(ctx, contact)
+        val list = load(ctx, key, legacyName)
             .filter { it.at > 0L && now - it.at <= PRUNE_AGE_MS }
             .toMutableList()
 
@@ -117,9 +159,9 @@ object ChatMemory {
         while (list.size > MAX_SEEN) list.removeAt(0)
 
         // Everything left was pruned by age, so there is nothing worth keeping —
-        // drop the bucket instead of leaving an empty entry behind per contact.
+        // drop the bucket instead of leaving an empty entry behind per conversation.
         if (list.isEmpty()) {
-            sp(ctx).edit().remove(keyFor(contact)).apply()
+            sp(ctx).edit().remove(keyFor(FILE, key)).apply()
             return
         }
 
@@ -127,12 +169,14 @@ object ChatMemory {
         for (t in list) {
             arr.put(JSONObject().put("role", t.role).put("content", t.content).put("at", t.at))
         }
-        sp(ctx).edit().putString(keyFor(contact), arr.toString()).apply()
+        sp(ctx).edit().putString(keyFor(FILE, key), arr.toString()).apply()
     }
 
-    /** Wipe one contact's memory, including anything still stored but expired. */
-    fun clear(ctx: Context, contact: String) {
-        sp(ctx).edit().remove(keyFor(contact)).apply()
+    /** Wipe one conversation's memory, including anything still stored but expired. */
+    fun clear(ctx: Context, key: ConversationKey, legacyName: String? = null) {
+        val edit = sp(ctx).edit().remove(keyFor(FILE, key))
+        if (legacyName != null) edit.remove(legacyKeyFor(legacyName))
+        edit.apply()
     }
 
     fun clearAll(ctx: Context) {
@@ -140,18 +184,100 @@ object ChatMemory {
     }
 
     /**
-     * How many turns are actually in play for this contact. Counts only real fresh
-     * turns — deliberately not `history().size`, because [history] prepends a
+     * How many turns are actually in play for this conversation. Counts only real
+     * fresh turns — deliberately not `history().size`, because [history] prepends a
      * gap-marker system message that is not a conversation turn. Counting it made
      * the UI claim one more message than the model really receives.
      */
-    fun activeCount(ctx: Context, contact: String): Int {
+    fun activeCount(ctx: Context, key: ConversationKey, legacyName: String? = null): Int {
         val now = System.currentTimeMillis()
-        return load(ctx, contact).count { it.at > 0L && now - it.at <= MAX_AGE_MS }
+        return load(ctx, key, legacyName).count { it.at > 0L && now - it.at <= MAX_AGE_MS }
     }
 
     /** How many turns are stored, fresh or not — used by the log screen. */
-    fun storedCount(ctx: Context, contact: String): Int = load(ctx, contact).size
+    fun storedCount(ctx: Context, key: ConversationKey, legacyName: String? = null): Int =
+        load(ctx, key, legacyName).size
+
+    /** Clears every bucket that matches a typed contact name. Returns how many. */
+    fun clearByName(ctx: Context, contact: String): Int {
+        val wanted = contact.trim()
+        if (wanted.isEmpty()) return 0
+        var n = 0
+        try {
+            val edit = sp(ctx).edit()
+            for ((storedKey, value) in sp(ctx).all) {
+                if (value !is String) continue
+                val matches = storedKey == legacyKeyFor(wanted) ||
+                        (storedKey.startsWith("c_") && value.contains("\"role\"") &&
+                                value.contains(wanted, ignoreCase = true))
+                if (matches) {
+                    edit.remove(storedKey)
+                    n++
+                }
+            }
+            if (n > 0) edit.apply()
+        } catch (e: Exception) {
+            return n
+        }
+        return n
+    }
+
+    /** Counts across every bucket belonging to a typed contact name. */
+    fun activeCountByName(ctx: Context, contact: String): Int {
+        val wanted = contact.trim()
+        if (wanted.isEmpty()) return 0
+        val now = System.currentTimeMillis()
+        var total = 0
+        try {
+            for ((storedKey, value) in sp(ctx).all) {
+                if (value !is String) continue
+                if (!storedKey.startsWith("c_") && !storedKey.startsWith("h_")) continue
+                if (storedKey.startsWith("c_") && !value.contains(wanted, ignoreCase = true)) continue
+                if (storedKey.startsWith("h_") && storedKey != legacyKeyFor(wanted)) continue
+                total += parseTurns(value).count { it.at > 0L && now - it.at <= MAX_AGE_MS }
+            }
+        } catch (e: Exception) {
+            return total
+        }
+        return total
+    }
+
+    /** Counts every stored turn belonging to a typed contact name, fresh or not. */
+    fun storedCountByName(ctx: Context, contact: String): Int {
+        val wanted = contact.trim()
+        if (wanted.isEmpty()) return 0
+        var total = 0
+        try {
+            for ((storedKey, value) in sp(ctx).all) {
+                if (value !is String) continue
+                if (!storedKey.startsWith("c_") && !storedKey.startsWith("h_")) continue
+                if (storedKey.startsWith("c_") && !value.contains(wanted, ignoreCase = true)) continue
+                if (storedKey.startsWith("h_") && storedKey != legacyKeyFor(wanted)) continue
+                total += parseTurns(value).size
+            }
+        } catch (e: Exception) {
+            return total
+        }
+        return total
+    }
+
+    private fun parseTurns(raw: String): List<Turn> = try {
+        val arr = JSONArray(raw)
+        val out = ArrayList<Turn>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            out.add(
+                Turn(
+                    o.optString("role", "user"),
+                    o.optString("content", ""),
+                    o.optLong("at", 0L)
+                )
+            )
+        }
+        out
+    } catch (e: Exception) {
+        emptyList()
+    }
 
     // ------------------------------------------------------------ backup
 

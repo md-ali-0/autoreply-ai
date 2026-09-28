@@ -17,6 +17,12 @@ import java.util.concurrent.TimeUnit
 object AiClient {
 
     /**
+     * Hard ceiling on a chat-completion response body. A real completion is a few
+     * kilobytes; anything near this means the base URL is not pointing at a chat API.
+     */
+    private const val MAX_RESPONSE_BYTES = 1_000_000L
+
+    /**
      * One chat message. [imageBase64] turns it into a multimodal message — the
      * OpenAI content-parts shape, which is what every vision gateway accepts.
      */
@@ -76,7 +82,12 @@ object AiClient {
         if (apiKey.isNotBlank()) builder.addHeader("Authorization", "Bearer $apiKey")
 
         client.newCall(builder.build()).execute().use { resp ->
-            val raw = resp.body?.string().orEmpty()
+            // Read with a ceiling rather than `body.string()`, which will happily
+            // allocate whatever the server sends. A misconfigured base URL pointing at
+            // something that is not a chat API can return megabytes, and the whole
+            // reply pipeline runs on a background thread the app cannot afford to lose
+            // to an OOM. 1 MB is far more than any real completion needs.
+            val raw = readBounded(resp.body, MAX_RESPONSE_BYTES)
             if (!resp.isSuccessful) {
                 throw IOException("HTTP ${resp.code} — ${raw.take(240)}")
             }
@@ -89,25 +100,70 @@ object AiClient {
 
             // Reasoning models (deepseek-r1 family and the many clones of it) split
             // their output in two: the visible answer goes in `content`, the thinking
-            // goes in `reasoning_content`. Some gateways put the whole answer in
-            // `reasoning_content` and leave `content` empty — which is what apinex.bond
-            // did six times in a row on 28 Sep. Prefer `reasoning_content` over giving
-            // up: an answer that needs a trim beats no answer at all.
+            // goes in `reasoning_content`.
+            //
+            // Only `content` is ever sent to a human. `reasoning_content` is the model's
+            // private deliberation — "the user is asking how I am, I should reply
+            // politely, maybe say…" — and delivering that reads as the bot thinking out
+            // loud with the real answer missing. It is used only to decide *whether* to
+            // retry, never as the reply text itself.
             val content = message.optString("content", "").trim()
             if (content.isNotEmpty()) return content
 
             val reasoning = message.optString("reasoning_content", "").trim()
-            if (reasoning.isNotEmpty()) return reasoning
+            val finish = choices.getJSONObject(0).optString("finish_reason", "?")
 
-            // Both empty: say *why* rather than returning "". A bare empty string is
+            if (reasoning.isNotEmpty()) {
+                // The gateway filled in the thinking but not the answer. Retrying is the
+                // right move: the same model very often returns a proper `content` on a
+                // second pass, and if it does not, the caller falls through to the next
+                // provider instead of shipping the model's internal monologue.
+                throw BlankAnswerException(
+                    "খালি content (শুধু reasoning এসেছে) — মডেল: $model, finish_reason=$finish"
+                )
+            }
+
+            // Nothing at all: say *why* rather than returning "". A bare empty string is
             // indistinguishable from a model that chose to say nothing, and that is
             // exactly what made this bug invisible for a whole day.
-            throw IOException(
+            throw BlankAnswerException(
                 "খালি উত্তর — content ও reasoning_content দুটোই ফাঁকা " +
-                        "(মডেল: $model, finish_reason=" +
-                        choices.getJSONObject(0).optString("finish_reason", "?") + ")"
+                        "(মডেল: $model, finish_reason=$finish)"
             )
         }
+    }
+
+    /**
+     * A response that carried no usable answer — distinct from a transport failure, so
+     * the caller can retry or fall through to another provider rather than surfacing a
+     * half-formed reply.
+     */
+    class BlankAnswerException(message: String) : IOException(message)
+
+    /**
+     * Read an HTTP body with a hard byte ceiling. Returns what was read; throws as soon
+     * as the ceiling is crossed, so a hostile or misconfigured endpoint cannot exhaust
+     * memory before we notice.
+     */
+    private fun readBounded(body: okhttp3.ResponseBody?, limit: Long): String {
+        if (body == null) return ""
+        val declared = body.contentLength()
+        if (declared > limit) {
+            throw IOException("রেসপন্স অনেক বড় ($declared বাইট > $limit) — বাদ দেওয়া হলো")
+        }
+        val buf = ByteArray(8192)
+        val out = java.io.ByteArrayOutputStream()
+        body.byteStream().use { input ->
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                if (out.size() + n > limit) {
+                    throw IOException("রেসপন্স সীমা ছাড়িয়ে গেছে (>$limit বাইট) — বাদ দেওয়া হলো")
+                }
+                out.write(buf, 0, n)
+            }
+        }
+        return out.toString("UTF-8")
     }
 
     /**

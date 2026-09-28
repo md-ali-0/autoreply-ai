@@ -31,6 +31,7 @@ object Approval {
 
     /** Everything needed to send the draft later. */
     class Draft(
+        val key: ConversationKey,
         val pkg: String,
         val sender: String,
         val message: String,
@@ -166,10 +167,10 @@ object Approval {
     }
 
     private fun onSent(app: Context, draft: Draft) {
-        ChatMemory.add(app, draft.sender, "user", draft.message)
-        ChatMemory.add(app, draft.sender, "assistant", draft.reply)
-        Prefs.get(app).setLastReply(draft.sender, System.currentTimeMillis())
-        SentMessageTracker.record(draft.reply)
+        ChatMemory.add(app, draft.key, "user", draft.message, legacyName = draft.sender)
+        ChatMemory.add(app, draft.key, "assistant", draft.reply, legacyName = draft.sender)
+        Prefs.get(app).setLastReply(draft.key, System.currentTimeMillis())
+        SentMessageTracker.record(draft.key, draft.reply)
         DigestStore.record(
             app,
             DigestStore.Event(

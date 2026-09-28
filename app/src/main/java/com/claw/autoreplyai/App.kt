@@ -29,6 +29,17 @@ class App : Application() {
                 "পেন্ডিং কিউ ফেরানো যায়নি (বুট): ${e.javaClass.simpleName} — ${e.message ?: ""}"
             )
         }
+
+        // One-time: move any API keys still sitting in plaintext preferences into the
+        // Keystore-backed store. Also runs on every later boot, where it is a no-op.
+        try {
+            Prefs.get(this).migrateSecretsToKeystore()
+        } catch (e: Throwable) {
+            LogStore.add(
+                this,
+                "সিক্রেট সরানো যায়নি: ${e.javaClass.simpleName} — ${e.message ?: ""}"
+            )
+        }
     }
 
     /**

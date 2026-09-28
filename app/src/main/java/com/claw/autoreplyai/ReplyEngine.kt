@@ -36,6 +36,20 @@ object ReplyEngine {
     private const val HISTORY_CHARS = 4_000
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /**
+     * Serialises every mutation of [pending] **together with** its persistence.
+     *
+     * Two threads touch this state at once — a new message arriving, and a scheduled
+     * job waking up — and a `synchronized` map alone is not enough. `remove` followed
+     * by `persistPending` could interleave with an `insert` and a second
+     * `persistPending`, so the snapshot written last could be the *older* one: the
+     * queue survives a process death, but short one reply. Holding one lock across
+     * mutation + write means disk always matches memory.
+     */
+    private val queueLock = Any()
+
+    /** Conversations with a reply in flight. Keyed by [ConversationKey]. */
     private val inFlight: MutableSet<String> = Collections.synchronizedSet(HashSet())
 
     fun onIncoming(
@@ -47,10 +61,20 @@ object ReplyEngine {
         phoneHint: String?,
         direct: DirectReplier.Handle?,
         contentIntent: PendingIntent? = null,
-        postTime: Long = 0L
+        postTime: Long = 0L,
+        /**
+         * The notification's own identity. Preferred over the sender name because a
+         * name is not unique across apps — "Rahim" on WhatsApp and "Rahim" on
+         * Messenger are different people sharing one bucket otherwise.
+         */
+        conversationIdentity: String? = null,
+        keyOverride: ConversationKey? = null
     ) {
         val app = ctx.applicationContext
         val p = Prefs.get(app)
+        val key = keyOverride
+            ?: ConversationKey.of(pkg, phone = phoneHint, identity = conversationIdentity, sender = sender)
+        val addr = key.storageKey
 
         if (!p.enabled) return
         if (message.isBlank()) return
@@ -110,31 +134,29 @@ object ReplyEngine {
         // answer it once the window closes — otherwise the contact gets a reply to
         // an older message and silence on the one they actually just sent, which
         // reads as the bot answering the wrong thing.
-        val remaining = p.cooldownSec * 1000L - (System.currentTimeMillis() - p.lastReply(sender))
+        val remaining = p.cooldownSec * 1000L - (System.currentTimeMillis() - p.lastReply(key))
         if (remaining > 0) {
-            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime)
-            persistPending(app)
+            enqueue(app, key, Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime, key = key))
             log(app, "কুলডাউনে — $sender (নতুন মেসেজটা পরে উত্তর দেওয়া হবে)")
-            schedulePending(app, sender, remaining)
+            schedulePending(app, key, remaining)
             return
         }
 
-        if (!inFlight.add(sender)) {
+        if (!inFlight.add(addr)) {
             // Same reasoning as the cooldown — never lose the message, queue it.
-            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime)
-            persistPending(app)
+            enqueue(app, key, Pending(pkg, sender, message, phoneHint, direct, contentIntent, postTime, key = key))
             log(app, "আগের রিপ্লাই চলছে — $sender (এই মেসেজটা পরে উত্তর দেওয়া হবে)")
-            schedulePending(app, sender, 3_000L)
+            schedulePending(app, key, 3_000L)
             return
         }
 
         scope.launch {
             try {
-                handle(app, p, pkg, sender, message, phoneHint, direct, contentIntent, postTime)
+                handle(app, p, key, pkg, sender, message, phoneHint, direct, contentIntent, postTime)
             } catch (e: Exception) {
                 log(app, "ত্রুটি — $sender: ${e.message}")
             } finally {
-                inFlight.remove(sender)
+                inFlight.remove(addr)
             }
         }
     }
@@ -159,11 +181,51 @@ object ReplyEngine {
         val contentIntent: PendingIntent?,
         val postTime: Long,
         /** When the message originally arrived — used to expire stale restored entries. */
-        val queuedAt: Long = System.currentTimeMillis()
+        val queuedAt: Long = System.currentTimeMillis(),
+        /**
+         * Stable identity of the conversation this belongs to. Carried so a restored
+         * entry keeps its own cooldown and memory bucket instead of falling back to
+         * a name that may belong to somebody else on another app.
+         */
+        val key: ConversationKey
     )
 
-    private val pending = Collections.synchronizedMap(HashMap<String, Pending>())
+    private fun pendingKey(pkg: String, sender: String, phoneHint: String?, key: ConversationKey?): ConversationKey =
+        key ?: ConversationKey.of(pkg, phone = phoneHint, sender = sender)
+
+    private val pending = HashMap<String, Pending>()
+
+    /**
+     * Conversations with a scheduled wake-up, so the same message is not queued to be
+     * retried twice over. Holds storage keys, matching [pending].
+     */
     private val pendingScheduled: MutableSet<String> = Collections.synchronizedSet(HashSet())
+
+    /**
+     * Queue an entry and flush it to disk as one indivisible step. Always use this
+     * instead of touching [pending] directly — see [queueLock].
+     */
+    private fun enqueue(app: Context, key: ConversationKey, value: Pending) {
+        synchronized(queueLock) {
+            pending[key.storageKey] = value
+            persistPendingLocked(app)
+        }
+    }
+
+    /**
+     * Drop an entry and flush, atomically. Returns the entry that was removed so the
+     * caller can act on what it actually owned rather than on whatever a concurrent
+     * write may have left behind.
+     */
+    private fun dequeue(app: Context, key: ConversationKey): Pending? = synchronized(queueLock) {
+        val removed = pending.remove(key.storageKey)
+        persistPendingLocked(app)
+        removed
+    }
+
+    private fun peek(key: ConversationKey): Pending? = synchronized(queueLock) { pending[key.storageKey] }
+
+    private fun pendingKeys(): List<String> = synchronized(queueLock) { pending.keys.toList() }
 
     /**
      * Where the queue is mirrored so it survives the process being killed. Android
@@ -179,19 +241,25 @@ object ReplyEngine {
      */
     private const val PENDING_MAX_AGE_MS = 15 * 60 * 1000L
 
-    private fun persistPending(app: Context) {
+    /**
+     * Write the queue to disk. Caller must already hold [queueLock] — this exists as a
+     * locked variant so mutation and persistence can be one atomic step.
+     */
+    private fun persistPendingLocked(app: Context) {
         try {
             val arr = JSONArray()
-            val snapshot = synchronized(pending) { pending.entries.toList() }
-            for ((sender, v) in snapshot) {
+            for ((storedKey, v) in pending.entries.toList()) {
                 arr.put(
                     JSONObject()
-                        .put("sender", sender)
+                        .put("addr", storedKey)
+                        .put("sender", v.sender)
                         .put("pkg", v.pkg)
                         .put("message", v.message)
                         .put("phoneHint", v.phoneHint ?: "")
                         .put("postTime", v.postTime)
                         .put("queuedAt", v.queuedAt)
+                        .put("convPkg", v.key.packageName)
+                        .put("convId", v.key.conversationId)
                 )
             }
             app.getSharedPreferences(PENDING_FILE, Context.MODE_PRIVATE)
@@ -216,29 +284,53 @@ object ReplyEngine {
             var restored = 0
             var expired = 0
 
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val sender = o.optString("sender")
-                val message = o.optString("message")
-                val queuedAt = o.optLong("queuedAt", 0L)
-                if (sender.isBlank() || message.isBlank()) continue
+            synchronized(queueLock) {
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val sender = o.optString("sender")
+                    val message = o.optString("message")
+                    val queuedAt = o.optLong("queuedAt", 0L)
+                    if (sender.isBlank() || message.isBlank()) continue
 
-                if (queuedAt <= 0L || now - queuedAt > PENDING_MAX_AGE_MS) {
-                    expired++
-                    continue
+                    if (queuedAt <= 0L || now - queuedAt > PENDING_MAX_AGE_MS) {
+                        expired++
+                        continue
+                    }
+
+                    // Prefer the conversation identity the entry was written with. Falling
+                    // back to an address reconstructed from the sender name would silently
+                    // re-key the entry, and on a name that exists in two apps that means
+                    // delivering into the wrong conversation.
+                    val convId = o.optString("convId")
+                    val convPkg = o.optString("convPkg")
+                    val key = if (convId.isNotBlank() && convPkg.isNotBlank()) {
+                        ConversationKey(convPkg, convId)
+                    } else {
+                        ConversationKey.of(
+                            o.optString("pkg"),
+                            phone = o.optString("phoneHint").takeIf { it.isNotBlank() },
+                            sender = sender
+                        )
+                    }
+
+                    // Never let a stale entry overwrite one that a live message already
+                    // re-queued under the same key while we were reading.
+                    val addr = o.optString("addr").takeIf { it.isNotBlank() } ?: key.storageKey
+                    if (pending.containsKey(addr)) continue
+
+                    pending[addr] = Pending(
+                        pkg = o.optString("pkg"),
+                        sender = sender,
+                        message = message,
+                        phoneHint = o.optString("phoneHint").takeIf { it.isNotBlank() },
+                        direct = null,
+                        contentIntent = null,
+                        postTime = o.optLong("postTime", 0L),
+                        queuedAt = queuedAt,
+                        key = key
+                    )
+                    restored++
                 }
-
-                pending[sender] = Pending(
-                    pkg = o.optString("pkg"),
-                    sender = sender,
-                    message = message,
-                    phoneHint = o.optString("phoneHint").takeIf { it.isNotBlank() },
-                    direct = null,
-                    contentIntent = null,
-                    postTime = o.optLong("postTime", 0L),
-                    queuedAt = queuedAt
-                )
-                restored++
             }
 
             if (restored > 0 || expired > 0) {
@@ -249,69 +341,66 @@ object ReplyEngine {
                 )
             }
             // Nothing usable left; clear the file so it is not re-read next boot.
-            if (restored == 0) persistPending(app)
+            if (restored == 0) synchronized(queueLock) { persistPendingLocked(app) }
 
             val p = Prefs.get(app)
-            for (sender in synchronized(pending) { pending.keys.toList() }) {
-                val v = pending[sender] ?: continue
-                val remaining = p.cooldownSec * 1000L - (now - p.lastReply(sender))
-                if (remaining > 0) schedulePending(app, sender, remaining) else schedulePending(app, sender, 1_000L)
+            for (addr in pendingKeys()) {
+                val v = synchronized(queueLock) { pending[addr] } ?: continue
+                val remaining = p.cooldownSec * 1000L - (now - p.lastReply(v.key))
+                schedulePending(app, v.key, if (remaining > 0) remaining else 1_000L)
             }
         } catch (e: Exception) {
             log(app, "পেন্ডিং কিউ ফেরানো যায়নি: ${e.message}")
         }
     }
 
-    private fun schedulePending(app: Context, sender: String, delayMs: Long, attempt: Int = 0) {
-        if (!pendingScheduled.add(sender)) return
+    private fun schedulePending(app: Context, key: ConversationKey, delayMs: Long, attempt: Int = 0) {
+        val addr = key.storageKey
+        if (!pendingScheduled.add(addr)) return
         scope.launch {
             delay(delayMs.coerceAtLeast(500L) + 500L)
-            pendingScheduled.remove(sender)
+            pendingScheduled.remove(addr)
 
             // Read but do NOT remove yet — the message must survive a failed attempt.
-            val msg = pending[sender] ?: return@launch
+            val msg = peek(key) ?: return@launch
             val p = Prefs.get(app)
             if (!p.enabled) {
-                pending.remove(sender)
-                persistPending(app)
+                dequeue(app, key)
                 return@launch
             }
 
             // Give up on anything that has been waiting longer than a reply is worth.
             if (System.currentTimeMillis() - msg.queuedAt > PENDING_MAX_AGE_MS) {
-                pending.remove(sender)
-                persistPending(app)
-                log(app, "পেন্ডিং মেসেজ বাদ (অনেক দেরি হয়ে গেছে) — $sender")
+                dequeue(app, key)
+                log(app, "পেন্ডিং মেসেজ বাদ (অনেক দেরি হয়ে গেছে) — ${msg.sender}")
                 return@launch
             }
 
             // Still inside the cooldown? wait it out.
-            val remaining = p.cooldownSec * 1000L - (System.currentTimeMillis() - p.lastReply(sender))
+            val remaining = p.cooldownSec * 1000L - (System.currentTimeMillis() - p.lastReply(key))
             if (remaining > 0) {
-                schedulePending(app, sender, remaining, attempt)
+                schedulePending(app, key, remaining, attempt)
                 return@launch
             }
 
             // Another reply is still running? try again shortly, a bounded number of times.
-            if (!inFlight.add(sender)) {
+            if (!inFlight.add(addr)) {
                 if (attempt < MAX_PENDING_TRIES) {
-                    schedulePending(app, sender, 3_000L, attempt + 1)
+                    schedulePending(app, key, 3_000L, attempt + 1)
                 } else {
-                    pending.remove(sender)
-                    persistPending(app)
-                    log(app, "পরে উত্তর দেওয়ার চেষ্টা ছেড়ে দেওয়া হলো — $sender")
+                    dequeue(app, key)
+                    log(app, "পরে উত্তর দেওয়ার চেষ্টা ছেড়ে দেওয়া হলো — ${msg.sender}")
                 }
                 return@launch
             }
 
-            pending.remove(sender)
-            persistPending(app)
+            dequeue(app, key)
             try {
-                handle(app, p, msg.pkg, msg.sender, msg.message, msg.phoneHint, msg.direct, msg.contentIntent, msg.postTime)
+                handle(app, p, key, msg.pkg, msg.sender, msg.message, msg.phoneHint, msg.direct, msg.contentIntent, msg.postTime)
             } catch (e: Exception) {
-                log(app, "পরে উত্তর দিতে গিয়ে ত্রুটি — $sender: ${e.message}")
+                log(app, "পরে উত্তর দিতে গিয়ে ত্রুটি — ${msg.sender}: ${e.message}")
             } finally {
-                inFlight.remove(sender)
+                inFlight.remove(addr)
             }
         }
     }
@@ -319,6 +408,7 @@ object ReplyEngine {
     private suspend fun handle(
         app: Context,
         p: Prefs,
+        key: ConversationKey,
         pkg: String,
         sender: String,
         message: String,
@@ -341,9 +431,20 @@ object ReplyEngine {
 
         if (p.moodEnabled) {
             handleMood(
-                app, p, pkg, sender, display, phoneHint, direct, contentIntent,
+                app, p, key, pkg, sender, display, phoneHint, direct, contentIntent,
                 incoming.fromVoice, incoming.imageBase64
             )
+            return
+        }
+
+        // Some messages must never be answered by a machine on the user's behalf,
+        // however well the model might phrase it. Catching them here costs nothing and
+        // removes any chance of a confident-sounding wrong answer.
+        ReplyValidator.shouldHoldBeforeReply(text)?.let { why ->
+            log(app, "🛑 নিজে দেখুন — $sender: $why")
+            ChatMemory.add(app, key, "user", display, legacyName = sender)
+            Notify.needsYou(app, sender, display.take(120), "$why — তাই AI উত্তর দেয়নি।")
+            digest(app, pkg, sender, display, DigestStore.ACTION_HELD, "")
             return
         }
 
@@ -353,14 +454,24 @@ object ReplyEngine {
         messages.add(
             AiClient.Msg(
                 "system",
-                buildSystemPrompt(p, sender, contactContext, incoming.fromVoice, fromPhoto, close)
+                buildSystemPrompt(p, key, sender, contactContext, incoming.fromVoice, fromPhoto, close)
             )
         )
-        messages.addAll(trimmedHistory(app, sender))
+        messages.addAll(trimmedHistory(app, key, sender))
         messages.add(AiClient.Msg("user", text, incoming.imageBase64))
 
         val raw = try {
             askAi(app, messages)
+        } catch (e: AiClient.BlankAnswerException) {
+            // The gateway returned reasoning but no answer. Rather than shipping the
+            // model's internal monologue, ask again — one retry recovers most of these.
+            log(app, "খালি উত্তর, আবার চেষ্টা করছি — $sender (${e.message})")
+            try {
+                askAi(app, messages)
+            } catch (retry: Exception) {
+                noteApiFailure(app, p, retry.message ?: "অজানা ত্রুটি")
+                return
+            }
         } catch (e: Exception) {
             noteApiFailure(app, p, e.message ?: "অজানা ত্রুটি")
             return
@@ -380,7 +491,7 @@ object ReplyEngine {
                 log(app, "উত্তর দেওয়া হলো না (দরকার নেই) — $sender: $preview")
                 // Record it anyway: a history with holes is what makes the next
                 // reply look like it came out of nowhere.
-                ChatMemory.add(app, sender, "user", display)
+                ChatMemory.add(app, key, "user", display, legacyName = sender)
                 digest(app, pkg, sender, display, DigestStore.ACTION_IGNORED, "")
                 return
             }
@@ -388,7 +499,7 @@ object ReplyEngine {
             ReplyDecision.Action.HOLD -> {
                 if (p.holdOnEmotional) {
                     log(app, "⚠️ নিজে উত্তর দিন — $sender: $preview")
-                    ChatMemory.add(app, sender, "user", display)
+                    ChatMemory.add(app, key, "user", display, legacyName = sender)
                     Notify.needsYou(
                         app, sender, display,
                         "ব্যক্তিগত বা গুরুত্বপূর্ণ মনে হয়েছে, তাই AI উত্তর দেয়নি।"
@@ -408,6 +519,18 @@ object ReplyEngine {
             return
         }
 
+        // Deterministic gate. The prompt already forbids promises, but a prompt is a
+        // request — this is the step that does not depend on the model cooperating.
+        val verdict = ReplyValidator.validate(reply, text)
+        if (!verdict.allowed) {
+            val why = verdict.reason ?: "সন্দেহজনক উত্তর"
+            log(app, "🛑 নিজে দেখুন — $sender: $why\n    ▶ আটকে রাখা: ${reply.replace("\n", " ").take(90)}")
+            ChatMemory.add(app, key, "user", display, legacyName = sender)
+            Notify.needsYou(app, sender, reply.take(120), "$why — তাই AI নিজে পাঠায়নি।")
+            digest(app, pkg, sender, display, DigestStore.ACTION_HELD, reply)
+            return
+        }
+
         val finalText = if (p.signature.isNotBlank()) "$reply\n${p.signature}" else reply
 
         // Greetings and one-word replies go out quickly; everything else waits a
@@ -416,7 +539,7 @@ object ReplyEngine {
         val waitMs = p.replyDelayMs(quick)
         if (waitMs > 0) delay(waitMs)
 
-        deliverReply(app, p, pkg, sender, display, finalText, reply, contactContext.length, phoneHint, direct, contentIntent)
+        deliverReply(app, p, key, pkg, sender, display, finalText, reply, contactContext.length, phoneHint, direct, contentIntent)
     }
 
     /**
@@ -553,6 +676,7 @@ object ReplyEngine {
     private suspend fun handleMood(
         app: Context,
         p: Prefs,
+        key: ConversationKey,
         pkg: String,
         sender: String,
         message: String,
@@ -569,7 +693,7 @@ object ReplyEngine {
                 buildGatekeeperPrompt(p, sender, fromVoice, imageBase64 != null)
             )
         )
-        messages.addAll(trimmedHistory(app, sender))
+        messages.addAll(trimmedHistory(app, key, sender))
         messages.add(AiClient.Msg("user", message, imageBase64))
 
         val raw = try {
@@ -605,12 +729,13 @@ object ReplyEngine {
 
         // Small delay so it doesn't look instant
         delay(p.replyDelayMs(quick = false).coerceAtMost(2_000L))
-        deliverReply(app, p, pkg, sender, message, reply, reply, 0, phoneHint, direct, contentIntent)
+        deliverReply(app, p, key, pkg, sender, message, reply, reply, 0, phoneHint, direct, contentIntent)
     }
 
     private fun deliverReply(
         app: Context,
         p: Prefs,
+        key: ConversationKey,
         pkg: String,
         sender: String,
         message: String,
@@ -626,7 +751,7 @@ object ReplyEngine {
         if (p.approvalMode) {
             val shown = Approval.request(
                 app,
-                Approval.Draft(pkg, sender, message, finalText, phoneHint, direct, contentIntent)
+                Approval.Draft(key, pkg, sender, message, finalText, phoneHint, direct, contentIntent)
             )
             if (shown) {
                 log(app, "অনুমোদনের অপেক্ষায় — $sender: ${reply.replace("\n", " ").take(60)}")
@@ -640,7 +765,7 @@ object ReplyEngine {
         // Route 1: the notification's own reply action (works while locked, no
         // phone number or open chat needed). Every supported app posts one.
         if (direct != null && DirectReplier.send(app, direct, finalText)) {
-            onSent(app, p, pkg, sender, message, reply, contextChars)
+            onSent(app, p, key, pkg, sender, message, reply, contextChars)
             return
         }
         if (direct == null) {
@@ -679,7 +804,7 @@ object ReplyEngine {
         scope.launch {
             val ok = withTimeoutOrNull(35_000L) { deferred.await() } ?: false
             if (ok) {
-                onSent(app, p, pkg, sender, message, reply, contextChars)
+                onSent(app, p, key, pkg, sender, message, reply, contextChars)
             } else {
                 // The reply was written and the contact got nothing. Telling the user
                 // is the whole point of the app being trustworthy: on 28 Sep a real
@@ -707,18 +832,20 @@ object ReplyEngine {
     private fun onSent(
         app: Context,
         p: Prefs,
+        key: ConversationKey,
         pkg: String,
         sender: String,
         message: String,
         reply: String,
         contextChars: Int
     ) {
-        ChatMemory.add(app, sender, "user", message)
-        ChatMemory.add(app, sender, "assistant", reply)
-        p.setLastReply(sender, System.currentTimeMillis())
+        ChatMemory.add(app, key, "user", message, legacyName = sender)
+        ChatMemory.add(app, key, "assistant", reply, legacyName = sender)
+        p.setLastReply(key, System.currentTimeMillis())
         // Remember what we just sent so we don't reply to ourselves when the chat
-        // app echoes it back as a new notification.
-        SentMessageTracker.record(reply)
+        // app echoes it back as a new notification. Scoped to this conversation,
+        // otherwise a short generic reply suppresses a real message elsewhere.
+        SentMessageTracker.record(key, reply)
         digest(app, pkg, sender, message, DigestStore.ACTION_REPLIED, reply)
         // Both sides of the exchange are logged so a bad transcript is visible
         // right next to the reply it caused, instead of two lines apart.
@@ -736,8 +863,8 @@ object ReplyEngine {
      * model silently starts ignoring the system prompt — which looks exactly like
      * "it isn't understanding the context".
      */
-    private fun trimmedHistory(app: Context, sender: String): List<AiClient.Msg> {
-        val history = ChatMemory.history(app, sender)
+    private fun trimmedHistory(app: Context, key: ConversationKey, sender: String): List<AiClient.Msg> {
+        val history = ChatMemory.history(app, key, legacyName = sender)
         if (history.isEmpty()) return history
 
         val out = ArrayList<AiClient.Msg>()
@@ -830,6 +957,7 @@ object ReplyEngine {
 
     private fun buildSystemPrompt(
         p: Prefs,
+        key: ConversationKey,
         sender: String,
         contactContext: String,
         fromVoice: Boolean = false,
@@ -853,7 +981,7 @@ object ReplyEngine {
             }
         }
 
-        val last = p.lastReply(sender)
+        val last = p.lastReply(key)
         if (last > 0) {
             val minutes = (System.currentTimeMillis() - last) / 60_000L
             if (minutes > 0) {

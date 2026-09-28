@@ -170,7 +170,7 @@ class ContextFragment : BaseSettingsFragment() {
                 toast("আগে কন্টাক্টের নাম লিখুন")
                 return@setOnClickListener
             }
-            ChatMemory.clear(requireContext(), contact)
+            ChatMemory.clearByName(requireContext(), contact)
             updateMemory(entry)
             toast("$contact — মেমোরি মুছে দেওয়া হলো")
         }
@@ -185,8 +185,12 @@ class ContextFragment : BaseSettingsFragment() {
             ""
         } else {
             val ctx = requireContext()
-            val fresh = ChatMemory.activeCount(ctx, contact)
-            val total = ChatMemory.storedCount(ctx, contact)
+            // This screen works from a typed name, with no package to key off — so it
+            // sums every conversation whose stored history mentions that name. Slightly
+            // coarser than the engine's per-conversation view, but honest: it reports
+            // what is actually on disk for what the user typed.
+            val fresh = ChatMemory.activeCountByName(ctx, contact)
+            val total = ChatMemory.storedCountByName(ctx, contact)
             // Say so explicitly when turns are being withheld for being old — otherwise
             // the number dropping looks like data loss rather than ageing.
             if (total > fresh) {

@@ -28,12 +28,42 @@ import java.net.URLEncoder
 class SendAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
-    private var deadline = 0L
-    private var targetPkg = MessagingApps.WHATSAPP
-    private var pendingText = ""
-    private var textPrefilled = false
-    private var pendingResult: ((Boolean) -> Unit)? = null
-    private var attempts = 0
+
+    /**
+     * The single job in progress, or null when idle.
+     *
+     * This used to be six separate service-level fields (`targetPkg`, `pendingText`,
+     * `textPrefilled`, `pendingResult`, `attempts`, `deadline`). Because they were
+     * per-service rather than per-job, a second send arriving while the first was still
+     * looking for the Send button overwrote all six at once — so the first job would
+     * then tap Send on the second conversation's screen and report its own success. The
+     * user sees a reply delivered to the wrong person, which is the worst failure this
+     * app can produce.
+     *
+     * Bundling them into one object makes that impossible to express: there is only ever
+     * one job, and a second request waits its turn in [queue].
+     */
+    private class AccessibilityJob(
+        val pkg: String,
+        val target: Any,
+        val text: String,
+        val prefilled: Boolean,
+        val onResult: (Boolean) -> Unit,
+        val what: String
+    ) {
+        var attempts = 0
+        var textPrefilled = false
+        var deadline = 0L
+    }
+
+    private var job: AccessibilityJob? = null
+
+    /**
+     * Sends waiting for the current job to end. Accessibility is a single global
+     * resource — there is one screen, one focused window, one Send button — so
+     * serialising here is not a limitation to work around, it is the honest model.
+     */
+    private val queue = ArrayDeque<AccessibilityJob>()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -46,14 +76,15 @@ class SendAccessibilityService : AccessibilityService() {
         // exception here kills the service, and a dead service means auto-reply stops
         // with no visible symptom.
         try {
-            if (deadline == 0L) return
-            if (System.currentTimeMillis() > deadline) {
+            val j = job ?: return
+            if (j.deadline == 0L) return
+            if (System.currentTimeMillis() > j.deadline) {
                 finish(false)
                 return
             }
             val pkg = event?.packageName?.toString() ?: return
-            if (pkg != targetPkg) return
-            tick()
+            if (pkg != j.pkg) return
+            tick(j)
         } catch (e: Throwable) {
             LogStore.add(
                 applicationContext,
@@ -66,6 +97,18 @@ class SendAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        // A queued job will never run once the service is gone. Fail them now so the
+        // callers stop waiting and the reply is reported as undelivered instead of
+        // hanging until the caller's own timeout.
+        val stranded = queue.toList()
+        queue.clear()
+        job = null
+        for (s in stranded) {
+            try {
+                s.onResult(false)
+            } catch (_: Throwable) {
+            }
+        }
         super.onDestroy()
     }
 
@@ -112,12 +155,34 @@ class SendAccessibilityService : AccessibilityService() {
         onResult: (Boolean) -> Unit,
         what: String
     ): Boolean {
-        targetPkg = pkg
-        pendingText = text
-        textPrefilled = prefilled
-        pendingResult = onResult
-        attempts = 0
-        deadline = System.currentTimeMillis() + TIMEOUT_MS
+        // Busy: park it. Two jobs must never be in flight together, because they would
+        // share one screen — see [AccessibilityJob].
+        val current = job
+        if (current != null) {
+            if (queue.size >= MAX_QUEUE) {
+                LogStore.add(
+                    applicationContext,
+                    "সেন্ড কিউ ভরে গেছে (${queue.size}) — নতুন রিকোয়েস্ট বাদ"
+                )
+                onResult(false)
+                return false
+            }
+            queue.addLast(AccessibilityJob(pkg, target, text, prefilled, onResult, what))
+            LogStore.add(
+                applicationContext,
+                "সেন্ড কিউতে অপেক্ষা করছে (${queue.size}) — ${MessagingApps.label(pkg)} $what"
+            )
+            return true
+        }
+        return start(AccessibilityJob(pkg, target, text, prefilled, onResult, what))
+    }
+
+    /** Begin a job: remember it, open the conversation, and start looking for Send. */
+    private fun start(j: AccessibilityJob): Boolean {
+        job = j
+        j.attempts = 0
+        j.textPrefilled = j.prefilled
+        j.deadline = System.currentTimeMillis() + TIMEOUT_MS
 
         // A locked screen is the one case this route cannot handle — say so plainly
         // instead of timing out with a vague error.
@@ -133,12 +198,12 @@ class SendAccessibilityService : AccessibilityService() {
         wakeScreen()
 
         return try {
-            when (target) {
+            when (val target = j.target) {
                 is Intent -> startActivity(target)
                 is PendingIntent -> target.send()
                 else -> return false
             }
-            LogStore.add(applicationContext, "${MessagingApps.label(pkg)} $what খোলা হচ্ছে")
+            LogStore.add(applicationContext, "${MessagingApps.label(j.pkg)} ${j.what} খোলা হচ্ছে")
             scheduleTick()
             true
         } catch (e: Exception) {
@@ -172,12 +237,13 @@ class SendAccessibilityService : AccessibilityService() {
             // This runs on the main looper: an uncaught throw here is an app crash,
             // not a caught error, so the guard matters more than it does elsewhere.
             try {
-                if (deadline == 0L) return@postDelayed
-                if (System.currentTimeMillis() > deadline) {
+                val j = job ?: return@postDelayed
+                if (j.deadline == 0L) return@postDelayed
+                if (System.currentTimeMillis() > j.deadline) {
                     finish(false)
                     return@postDelayed
                 }
-                tick()
+                tick(j)
                 scheduleTick()
             } catch (e: Throwable) {
                 LogStore.add(
@@ -189,8 +255,8 @@ class SendAccessibilityService : AccessibilityService() {
         }, TICK_MS)
     }
 
-    private fun tick() {
-        attempts++
+    private fun tick(j: AccessibilityJob) {
+        j.attempts++
         // Every node call below can throw IllegalStateException once Android has
         // recycled the window we are walking. Failing this tick is fine — the next
         // one re-reads the tree — so swallow it rather than losing the service.
@@ -204,28 +270,28 @@ class SendAccessibilityService : AccessibilityService() {
         } catch (e: Throwable) {
             return
         }
-        if (pkgNow != targetPkg) return
+        if (pkgNow != j.pkg) return
 
         // 1. Tap Send if the text is already there (deep link) or once we typed it.
-        if (clickSend(root)) return
+        if (clickSend(j, root)) return
 
         // 2. Type the text into the composer, then send on a later tick.
-        if (attempts >= 2) {
+        if (j.attempts >= 2) {
             val entry = findComposer(root)
             if (entry != null) {
                 val args = Bundle()
-                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pendingText)
+                args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, j.text)
                 if (entry.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
-                    textPrefilled = true
+                    j.textPrefilled = true
                 }
             }
         }
     }
 
-    private fun clickSend(root: AccessibilityNodeInfo): Boolean {
+    private fun clickSend(j: AccessibilityJob, root: AccessibilityNodeInfo): Boolean {
         // Never tap Send before the composer actually holds our text — otherwise
         // the tap lands on an empty composer and reports a false success.
-        if (!textPrefilled) return false
+        if (!j.textPrefilled) return false
 
         val node = findById(root, SEND_IDS) ?: findByDescription(root)
         if (node == null) return false
@@ -237,12 +303,30 @@ class SendAccessibilityService : AccessibilityService() {
         return ok
     }
 
+    /**
+     * End the current job, hand the result back exactly once, then start the next
+     * queued one. Every exit path — success, timeout, launch failure, service
+     * teardown — funnels through here, which is what stops a job from being both
+     * finished and started again.
+     */
     private fun finish(success: Boolean) {
-        deadline = 0L
-        val cb = pendingResult
-        pendingResult = null
-        if (!success) LogStore.add(applicationContext, "✗ সময় শেষ — Send বাটন পাওয়া যায়নি")
-        cb?.invoke(success)
+        val done = job
+        job = null
+        if (done != null) {
+            if (!success) LogStore.add(applicationContext, "✗ সময় শেষ — Send বাটন পাওয়া যায়নি")
+            try {
+                done.onResult(success)
+            } catch (e: Throwable) {
+                LogStore.add(
+                    applicationContext,
+                    "‼️ সেন্ড ফলাফল জানাতে ত্রুটি — ${e.javaClass.simpleName}: ${e.message ?: ""}"
+                )
+            }
+        }
+        // Deliberately after the callback: the caller may log or queue more work, and
+        // starting the next job first would put two in flight at once.
+        val next = queue.removeFirstOrNull()
+        if (next != null) start(next)
     }
 
     // ------------------------------------------------------------- tree utils
@@ -298,6 +382,9 @@ class SendAccessibilityService : AccessibilityService() {
         private const val TIMEOUT_MS = 25_000L
         private const val TICK_MS = 700L
         private const val WAKE_MS = 20_000L
+
+        /** How many sends may wait behind the active one before new ones are refused. */
+        private const val MAX_QUEUE = 8
 
         private val SEND_IDS = listOf("send", "btn_send", "send_button", "button_send", "sendbutton")
         private val COMPOSER_IDS = listOf(

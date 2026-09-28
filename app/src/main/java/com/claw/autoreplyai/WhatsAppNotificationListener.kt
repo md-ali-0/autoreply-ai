@@ -177,16 +177,28 @@ class WhatsAppNotificationListener : NotificationListenerService() {
             }
         }
 
+        // Identity first: everything downstream keys off this. Prefer the phone number
+        // (identifies a person exactly), then the notification's own key — Android
+        // generates a stable one per poster/tag/id, and for apps that expose no phone
+        // number it is the only durable handle on a specific thread.
+        val conversation = ConversationKey.of(
+            pkg,
+            phone = phoneHint,
+            identity = sbn.key,
+            sender = title
+        )
+
         // Skip our own replies — the chat app posts a new notification when we send
         // a reply, and if we don't skip it the bot replies to itself in an infinite loop.
         // Layer 1: sender_person == null often means our own message (WhatsApp only).
-        // Layer 2: exact/fuzzy text match against recently sent messages (reliable everywhere).
+        // Layer 2: exact/fuzzy text match against recently sent messages, scoped to this
+        // conversation so a short generic reply elsewhere cannot silence a real message.
         if (ownMessage) {
             LogStore.add(applicationContext, "নিজের মেসেজ বাদ (sender_person=null) — $title")
             return
         }
 
-        if (SentMessageTracker.isOwnMessage(text)) {
+        if (SentMessageTracker.isOwnMessage(conversation, text)) {
             LogStore.add(applicationContext, "নিজের মেসেজ বাদ (content match) — $title")
             return
         }
@@ -237,7 +249,7 @@ class WhatsAppNotificationListener : NotificationListenerService() {
 
         ReplyEngine.onIncoming(
             applicationContext, pkg, title, text, isGroup, phoneHint, directReply, contentIntent,
-            sbn.postTime
+            sbn.postTime, conversationIdentity = sbn.key, keyOverride = conversation
         )
     }
 
