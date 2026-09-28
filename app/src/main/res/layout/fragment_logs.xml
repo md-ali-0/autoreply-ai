@@ -16,6 +16,14 @@
         android:paddingBottom="10dp"
         android:text="@string/logs_intro" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnDigest"
+        style="@style/PillButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="@string/digest_button" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

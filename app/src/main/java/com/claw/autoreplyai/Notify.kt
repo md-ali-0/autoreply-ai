@@ -71,8 +71,7 @@ object Notify {
     }
 
     /** Fired when the AI has failed repeatedly — the bot is effectively dead. */
-    fun botProblem(ctx: Context, reason: String) {
-        try {
+    fun botProblem(ctx: Context, reason: String) {        try {
             val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val n = NotificationCompat.Builder(ctx, channelId(ctx))
                 .setSmallIcon(R.drawable.ic_stat_auto)
@@ -87,6 +86,24 @@ object Notify {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setDefaults(NotificationCompat.DEFAULT_VIBRATE)
                 .setVibrate(longArrayOf(0, 400, 200, 400))
+                .setAutoCancel(true)
+                .build()
+            nm.notify(nextId(), n)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** The "what did I miss" brief, posted so it can be read without opening the app. */
+    fun digest(ctx: Context, summary: String) {
+        try {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val n = NotificationCompat.Builder(ctx, channelId(ctx))
+                .setSmallIcon(R.drawable.ic_stat_auto)
+                .setContentTitle("কী মিস করলাম")
+                .setContentText(summary.replace("\n", " ").take(120))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(summary))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setAutoCancel(true)
                 .build()
             nm.notify(nextId(), n)

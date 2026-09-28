@@ -1,5 +1,6 @@
 package com.claw.autoreplyai
 
+import android.app.PendingIntent
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -42,13 +43,27 @@ object ReplyEngine {
         message: String,
         isGroup: Boolean,
         phoneHint: String?,
-        direct: DirectReplier.Handle?
+        direct: DirectReplier.Handle?,
+        contentIntent: PendingIntent? = null
     ) {
         val app = ctx.applicationContext
         val p = Prefs.get(app)
 
         if (!p.enabled) return
         if (message.isBlank()) return
+
+        // Per-app switch: the user may want WhatsApp answers but not Messenger ones.
+        if (!MessagingApps.enabledBy(p, pkg)) {
+            log(app, "${MessagingApps.label(pkg)} বন্ধ রাখা আছে (সেটিংসে চালু করুন) — $sender")
+            return
+        }
+
+        // Defensive: a call event should never reach here, but if another entry
+        // point (accessibility, future integration) feeds one in, drop it early.
+        if (CallEventFilter.isCallEvent(message)) {
+            log(app, "কল ইভেন্ট বাদ (defensive) — $sender")
+            return
+        }
 
         if (isBlocked(p, sender)) {
             log(app, "কখনো রিপ্লাই দেব না লিস্টে আছে — $sender")
@@ -62,6 +77,7 @@ object ReplyEngine {
 
         if (p.hoursEnabled && !withinHours(p)) {
             log(app, "সময়সীমার বাইরে (${timeLabel(p.hourStart, p.hourStartMin)}–${timeLabel(p.hourEnd, p.hourEndMin)}) — $sender")
+            digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
             return
         }
 
@@ -72,6 +88,7 @@ object ReplyEngine {
                 .filter { it.isNotEmpty() }
             if (allowed.none { sender.lowercase().contains(it) }) {
                 log(app, "ফিল্টার লিস্টে নেই — $sender")
+                digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
                 return
             }
         }
@@ -82,7 +99,7 @@ object ReplyEngine {
         // reads as the bot answering the wrong thing.
         val remaining = p.cooldownSec * 1000L - (System.currentTimeMillis() - p.lastReply(sender))
         if (remaining > 0) {
-            pending[sender] = Pending(pkg, sender, message, phoneHint, direct)
+            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent)
             log(app, "কুলডাউনে — $sender (নতুন মেসেজটা পরে উত্তর দেওয়া হবে)")
             schedulePending(app, sender, remaining)
             return
@@ -90,7 +107,7 @@ object ReplyEngine {
 
         if (!inFlight.add(sender)) {
             // Same reasoning as the cooldown — never lose the message, queue it.
-            pending[sender] = Pending(pkg, sender, message, phoneHint, direct)
+            pending[sender] = Pending(pkg, sender, message, phoneHint, direct, contentIntent)
             log(app, "আগের রিপ্লাই চলছে — $sender (এই মেসেজটা পরে উত্তর দেওয়া হবে)")
             schedulePending(app, sender, 3_000L)
             return
@@ -98,7 +115,7 @@ object ReplyEngine {
 
         scope.launch {
             try {
-                handle(app, p, pkg, sender, message, phoneHint, direct)
+                handle(app, p, pkg, sender, message, phoneHint, direct, contentIntent)
             } catch (e: Exception) {
                 log(app, "ত্রুটি — $sender: ${e.message}")
             } finally {
@@ -114,7 +131,8 @@ object ReplyEngine {
         val sender: String,
         val message: String,
         val phoneHint: String?,
-        val direct: DirectReplier.Handle?
+        val direct: DirectReplier.Handle?,
+        val contentIntent: PendingIntent?
     )
 
     private val pending = Collections.synchronizedMap(HashMap<String, Pending>())
@@ -154,7 +172,7 @@ object ReplyEngine {
 
             pending.remove(sender)
             try {
-                handle(app, p, msg.pkg, msg.sender, msg.message, msg.phoneHint, msg.direct)
+                handle(app, p, msg.pkg, msg.sender, msg.message, msg.phoneHint, msg.direct, msg.contentIntent)
             } catch (e: Exception) {
                 log(app, "পরে উত্তর দিতে গিয়ে ত্রুটি — $sender: ${e.message}")
             } finally {
@@ -170,10 +188,16 @@ object ReplyEngine {
         sender: String,
         message: String,
         phoneHint: String?,
-        direct: DirectReplier.Handle?
+        direct: DirectReplier.Handle?,
+        contentIntent: PendingIntent?
     ) {
+        // Voice notes arrive as a placeholder ("🎤 Voice message"). Turn them into
+        // text first, otherwise the model is answering the word "Voice message".
+        val text = resolveIncomingText(app, p, pkg, sender, message)
+        if (text.isBlank()) return
+
         if (p.moodEnabled) {
-            handleMood(app, p, pkg, sender, message, phoneHint, direct)
+            handleMood(app, p, pkg, sender, text, phoneHint, direct, contentIntent)
             return
         }
 
@@ -181,10 +205,10 @@ object ReplyEngine {
         val contactContext = ContactContext.forContact(app, sender)
         messages.add(AiClient.Msg("system", buildSystemPrompt(p, sender, contactContext)))
         messages.addAll(trimmedHistory(app, sender))
-        messages.add(AiClient.Msg("user", message))
+        messages.add(AiClient.Msg("user", text))
 
         val raw = try {
-            askAi(p, messages)
+            askAi(app, messages)
         } catch (e: Exception) {
             noteApiFailure(app, p, e.message ?: "অজানা ত্রুটি")
             return
@@ -197,22 +221,24 @@ object ReplyEngine {
         }
 
         val decision = if (p.smartTriage) ReplyDecision.parse(raw) else ReplyDecision.plain(raw)
-        val preview = message.replace("\n", " ").take(70)
+        val preview = text.replace("\n", " ").take(70)
 
         when (decision.action) {
             ReplyDecision.Action.IGNORE -> {
                 log(app, "উত্তর দেওয়া হলো না (দরকার নেই) — $sender: $preview")
                 // Record it anyway: a history with holes is what makes the next
                 // reply look like it came out of nowhere.
-                ChatMemory.add(app, sender, "user", message)
+                ChatMemory.add(app, sender, "user", text)
+                digest(app, pkg, sender, text, DigestStore.ACTION_IGNORED, "")
                 return
             }
 
             ReplyDecision.Action.HOLD -> {
                 if (p.holdOnEmotional) {
                     log(app, "⚠️ নিজে উত্তর দিন — $sender: $preview")
-                    ChatMemory.add(app, sender, "user", message)
-                    Notify.needsYou(app, sender, message)
+                    ChatMemory.add(app, sender, "user", text)
+                    Notify.needsYou(app, sender, text)
+                    digest(app, pkg, sender, text, DigestStore.ACTION_HELD, "")
                     return
                 }
                 log(app, "আবেগপূর্ণ মেসেজ, তবে সেটিং অনুযায়ী উত্তর দেওয়া হচ্ছে — $sender")
@@ -235,7 +261,60 @@ object ReplyEngine {
         val waitMs = p.replyDelayMs(quick)
         if (waitMs > 0) delay(waitMs)
 
-        deliverReply(app, p, pkg, sender, message, finalText, reply, contactContext.length, phoneHint, direct)
+        deliverReply(app, p, pkg, sender, text, finalText, reply, contactContext.length, phoneHint, direct, contentIntent)
+    }
+
+    /**
+     * Replaces a voice-note placeholder with its transcript. Returns a blank string
+     * when the note cannot be read — a reply to the words "Voice message" helps
+     * nobody, so the message is skipped and the reason is logged instead.
+     */
+    private fun resolveIncomingText(
+        app: Context,
+        p: Prefs,
+        pkg: String,
+        sender: String,
+        message: String
+    ): String {
+        if (!p.transcribeVoice) return message
+        if (!VoiceTranscriber.looksLikeVoiceNote(message)) return message
+
+        if (!MessagingApps.canTranscribeVoice(pkg)) {
+            log(app, "ভয়েস মেসেজ — ${MessagingApps.label(pkg)}-এর অডিও পড়া যায় না, তাই উত্তর দেওয়া হচ্ছে না — $sender")
+            digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
+            return ""
+        }
+
+        log(app, "ভয়েস মেসেজ পেয়েছি — ট্রান্সক্রিপ্ট করছি — $sender")
+        val transcript = VoiceTranscriber.transcribe(app, p, pkg)
+        if (transcript.isNullOrBlank()) {
+            log(app, "ভয়েস মেসেজ পড়া গেল না — $sender")
+            digest(app, pkg, sender, message, DigestStore.ACTION_BLOCKED, "")
+            return ""
+        }
+        log(app, "ভয়েস ট্রান্সক্রিপ্ট ($sender): ${transcript.take(90)}")
+        return transcript
+    }
+
+    private fun digest(
+        app: Context,
+        pkg: String,
+        sender: String,
+        message: String,
+        action: String,
+        reply: String
+    ) {
+        DigestStore.record(
+            app,
+            DigestStore.Event(
+                at = System.currentTimeMillis(),
+                pkg = pkg,
+                sender = sender,
+                message = message,
+                action = action,
+                reply = reply
+            )
+        )
     }
 
     /**
@@ -251,7 +330,8 @@ object ReplyEngine {
         sender: String,
         message: String,
         phoneHint: String?,
-        direct: DirectReplier.Handle?
+        direct: DirectReplier.Handle?,
+        contentIntent: PendingIntent?
     ) {
         val messages = ArrayList<AiClient.Msg>()
         messages.add(AiClient.Msg("system", buildGatekeeperPrompt(p, sender)))
@@ -259,7 +339,7 @@ object ReplyEngine {
         messages.add(AiClient.Msg("user", message))
 
         val raw = try {
-            askAi(p, messages)
+            askAi(app, messages)
         } catch (e: Exception) {
             noteApiFailure(app, p, e.message ?: "অজানা ত্রুটি")
             return
@@ -291,7 +371,7 @@ object ReplyEngine {
 
         // Small delay so it doesn't look instant
         delay(p.replyDelayMs(quick = false).coerceAtMost(2_000L))
-        deliverReply(app, p, pkg, sender, message, reply, reply, 0, phoneHint, direct)
+        deliverReply(app, p, pkg, sender, message, reply, reply, 0, phoneHint, direct, contentIntent)
     }
 
     private fun deliverReply(
@@ -304,11 +384,29 @@ object ReplyEngine {
         reply: String,
         contextChars: Int,
         phoneHint: String?,
-        direct: DirectReplier.Handle?
+        direct: DirectReplier.Handle?,
+        contentIntent: PendingIntent?
     ) {
-        // Route 1: the notification's own reply action (works while locked).
+        // Approval mode: never send on our own — show the draft and let the user
+        // decide. Nothing else changes, so approving later uses the same routes.
+        if (p.approvalMode) {
+            val shown = Approval.request(
+                app,
+                Approval.Draft(pkg, sender, message, finalText, phoneHint, direct, contentIntent)
+            )
+            if (shown) {
+                log(app, "অনুমোদনের অপেক্ষায় — $sender: ${reply.replace("\n", " ").take(60)}")
+                digest(app, pkg, sender, message, DigestStore.ACTION_APPROVAL, reply)
+            } else {
+                log(app, "অনুমোদন দেখানো যায়নি, তাই কিছু পাঠানো হলো না — $sender")
+            }
+            return
+        }
+
+        // Route 1: the notification's own reply action (works while locked, no
+        // phone number or open chat needed). Every supported app posts one.
         if (direct != null && DirectReplier.send(app, direct, finalText)) {
-            onSent(app, p, sender, message, reply, contextChars)
+            onSent(app, p, pkg, sender, message, reply, contextChars)
             return
         }
         if (direct == null) {
@@ -316,25 +414,38 @@ object ReplyEngine {
         }
 
         // Route 2: open the chat and tap Send (needs an unlocked screen).
-        val rawNumber = phoneHint?.takeIf { it.isNotBlank() }
-            ?: ContactResolver.numberForName(app, sender)
-        if (rawNumber.isNullOrBlank()) {
-            log(app, "নাম্বার পাওয়া যায়নি — $sender (কন্টাক্ট পারমিশন দিন)")
-            return
-        }
-        val waNumber = normalizeNumber(rawNumber, p.countryCode)
-        if (waNumber.isNullOrBlank()) {
-            log(app, "নাম্বার নরমালাইজ করা যায়নি — $rawNumber")
-            return
-        }
-
         val deferred = CompletableDeferred<Boolean>()
-        SendAccessibilityService.send(app, pkg, waNumber, finalText) { deferred.complete(it) }
+
+        if (MessagingApps.supportsPhoneLink(pkg)) {
+            // WhatsApp: a wa.me link both opens the chat and pre-fills the text.
+            val rawNumber = phoneHint?.takeIf { it.isNotBlank() }
+                ?: ContactResolver.numberForName(app, sender)
+            if (rawNumber.isNullOrBlank()) {
+                log(app, "নাম্বার পাওয়া যায়নি — $sender (কন্টাক্ট পারমিশন দিন)")
+                return
+            }
+            val waNumber = normalizeNumber(rawNumber, p.countryCode)
+            if (waNumber.isNullOrBlank()) {
+                log(app, "নাম্বার নরমালাইজ করা যায়নি — $rawNumber")
+                return
+            }
+            SendAccessibilityService.send(app, pkg, waNumber, finalText) { deferred.complete(it) }
+        } else {
+            // Messenger: no phone-number link exists, so reopen the conversation
+            // through the notification's own content intent and type the reply in.
+            if (contentIntent == null) {
+                log(app, "চ্যাট খোলার উপায় নেই — $sender (নোটিফিকেশনে reply অ্যাকশন পাওয়া যায়নি)")
+                return
+            }
+            SendAccessibilityService.sendViaIntent(app, pkg, contentIntent, finalText) {
+                deferred.complete(it)
+            }
+        }
 
         scope.launch {
             val ok = withTimeoutOrNull(35_000L) { deferred.await() } ?: false
             if (ok) {
-                onSent(app, p, sender, message, reply, contextChars)
+                onSent(app, p, pkg, sender, message, reply, contextChars)
             } else {
                 log(app, "✗ পাঠানো যায়নি → $sender (ফোন লক থাকলে লক খুলে রাখুন)")
             }
@@ -344,6 +455,7 @@ object ReplyEngine {
     private fun onSent(
         app: Context,
         p: Prefs,
+        pkg: String,
         sender: String,
         message: String,
         reply: String,
@@ -352,9 +464,10 @@ object ReplyEngine {
         ChatMemory.add(app, sender, "user", message)
         ChatMemory.add(app, sender, "assistant", reply)
         p.setLastReply(sender, System.currentTimeMillis())
-        // Remember what we just sent so we don't reply to ourselves when
-        // WhatsApp echoes it back as a new notification.
+        // Remember what we just sent so we don't reply to ourselves when the chat
+        // app echoes it back as a new notification.
         SentMessageTracker.record(reply)
+        digest(app, pkg, sender, message, DigestStore.ACTION_REPLIED, reply)
         // The context length is shown so a broken contact-name match is visible
         // instead of silently producing replies that ignore the context.
         log(
@@ -386,14 +499,44 @@ object ReplyEngine {
 
     // ------------------------------------------------------------- prompting
 
-    /** One retry — mobile networks and free API tiers drop requests regularly. */
-    private suspend fun askAi(p: Prefs, messages: List<AiClient.Msg>): String {
-        return try {
-            AiClient.chat(p.baseUrl, p.apiKey, p.model, messages)
-        } catch (e: Exception) {
-            delay(1_500L)
-            AiClient.chat(p.baseUrl, p.apiKey, p.model, messages)
+    /**
+     * Tries the prioritized provider list until one succeeds.
+     * On fallback success, automatically switches the active provider
+     * so subsequent requests use the working one.
+     */
+    private suspend fun askAi(app: Context, messages: List<AiClient.Msg>): String {
+        val allProviders = AiProviderStore.all(app)
+        val ordered = AiProviderStore.prioritized(app)
+        if (ordered.isEmpty()) throw java.io.IOException("কোনো AI প্রোভাইডার সেট আপ নেই")
+
+        var lastError: Exception? = null
+        for ((i, provider) in ordered.withIndex()) {
+            try {
+                val result = AiClient.chat(provider.baseUrl, provider.apiKey, provider.model, messages)
+                if (result.isNotBlank()) {
+                    if (i > 0) {
+                        // Fallback succeeded — switch to this provider for future requests
+                        log(app, "ফলব্যাক সফল — ${provider.name} (${provider.model}) এখন থেকে ব্যবহার হবে")
+                        val originalIndex = allProviders.indexOfFirst {
+                            it.name == provider.name && it.baseUrl == provider.baseUrl
+                        }.coerceAtLeast(0)
+                        AiProviderStore.setSelected(app, originalIndex)
+                        val p = Prefs.get(app)
+                        p.baseUrl = provider.baseUrl
+                        p.apiKey = provider.apiKey
+                        p.model = provider.model
+                    }
+                    return result
+                }
+                lastError = java.io.IOException("${provider.name} খালি উত্তর দিয়েছে")
+            } catch (e: Exception) {
+                lastError = e
+                val reason = e.message ?: "অজানা ত্রুটি"
+                log(app, "API ব্যর্থ — ${provider.name}: $reason")
+                if (i < ordered.lastIndex) delay(1_500L)
+            }
         }
+        throw lastError ?: java.io.IOException("সব প্রোভাইডার ব্যর্থ")
     }
 
     private fun noteApiFailure(app: Context, p: Prefs, reason: String) {
@@ -450,10 +593,25 @@ object ReplyEngine {
             sb.append('\n').append(p.safetyRule.trim()).append('\n')
         }
 
+        if (p.autoLanguage) {
+            sb.append('\n').append(LANGUAGE_RULE).append('\n')
+        }
+
         sb.append('\n')
         sb.append(if (p.smartTriage) TRIAGE_RULES else PLAIN_RULES)
         return sb.toString()
     }
+
+    /**
+     * Answering an English message in Bangla is the fastest way to look like a bot,
+     * so mirror the contact's language unless the user turned this off.
+     */
+    private val LANGUAGE_RULE = """
+        ভাষার নিয়ম: কন্টাক্ট যে ভাষায় লিখেছে, সেই ভাষাতেই উত্তর দাও।
+        ইংরেজিতে লিখলে ইংরেজিতে, বাংলায় লিখলে বাংলায়, হিন্দিতে লিখলে হিন্দিতে।
+        কেউ মিশিয়ে লিখলে (যেমন বাংলা + ইংরেজি) স্বাভাবিক যেভাবে চলে সেভাবেই উত্তর দাও।
+        ভাষা অনুমান করতে না পারলে বাংলায় উত্তর দাও।
+    """.trimIndent()
 
     private val TRIAGE_RULES = """
         এখন তোমাকে শুধু উত্তর লিখতে হবে না — আগে ঠিক করবে উত্তর দেওয়া উচিত কি না।
@@ -513,6 +671,9 @@ object ReplyEngine {
         sb.append("তোমার কাজ কারো মেসেজের উত্তর দেওয়া এবং জরুরি মেসেজ চিনতে পারা।\n\n")
         sb.append("কন্টাক্টের নাম: ").append(sender).append('\n')
         sb.append("এখন সময়: ").append(clockText()).append("\n\n")
+        if (p.autoLanguage) {
+            sb.append(LANGUAGE_RULE).append("\n\n")
+        }
         sb.append(GATEKEEPER_RULES)
         return sb.toString()
     }

@@ -155,6 +155,183 @@
                         android:id="@+id/tvOverlayState"
                         style="@style/PermState" />
                 </LinearLayout>
+
+                <View style="@style/Divider" />
+
+                <LinearLayout
+                    android:id="@+id/rowAudio"
+                    style="@style/PermRow">
+
+                    <View
+                        android:id="@+id/dotAudio"
+                        style="@style/PermDot" />
+
+                    <TextView
+                        style="@style/RowLabel"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:paddingStart="12dp"
+                        android:text="@string/audio_perm" />
+
+                    <TextView
+                        android:id="@+id/tvAudioState"
+                        style="@style/PermState" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            style="@style/CardSurface"
+            android:layout_marginTop="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    style="@style/RowLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/apps_title"
+                    android:textStyle="bold" />
+
+                <TextView
+                    style="@style/RowSub"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="10dp"
+                    android:text="@string/apps_sub" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:paddingEnd="10dp">
+
+                        <TextView
+                            style="@style/RowLabel"
+                            android:text="@string/app_whatsapp" />
+
+                        <TextView
+                            style="@style/RowSub"
+                            android:text="@string/app_whatsapp_sub" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchWhatsApp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View
+                    style="@style/Divider"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:paddingEnd="10dp">
+
+                        <TextView
+                            style="@style/RowLabel"
+                            android:text="@string/app_messenger" />
+
+                        <TextView
+                            style="@style/RowSub"
+                            android:text="@string/app_messenger_sub" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchMessenger"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View
+                    style="@style/Divider"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:paddingEnd="10dp">
+
+                        <TextView
+                            style="@style/RowLabel"
+                            android:text="@string/app_telegram" />
+
+                        <TextView
+                            style="@style/RowSub"
+                            android:text="@string/app_telegram_sub" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchTelegram"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View
+                    style="@style/Divider"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:paddingEnd="10dp">
+
+                        <TextView
+                            style="@style/RowLabel"
+                            android:text="@string/app_instagram" />
+
+                        <TextView
+                            style="@style/RowSub"
+                            android:text="@string/app_instagram_sub" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchInstagram"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

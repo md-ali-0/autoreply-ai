@@ -77,6 +77,22 @@ object AiProviderStore {
         sp(ctx).edit().putInt(KEY_SELECTED, index.coerceAtLeast(0)).apply()
     }
 
+    /**
+     * Returns providers ordered by priority: the selected one first,
+     * then the rest. Used for auto-fallback when the primary fails.
+     */
+    fun prioritized(ctx: Context): List<AiProvider> {
+        val list = all(ctx)
+        if (list.isEmpty()) return emptyList()
+        val sel = selectedIndex(ctx).coerceIn(0, list.lastIndex)
+        val ordered = mutableListOf<AiProvider>()
+        ordered.add(list[sel])
+        for (i in list.indices) {
+            if (i != sel) ordered.add(list[i])
+        }
+        return ordered
+    }
+
     /** Migrate from legacy single-provider prefs if providers list is empty. */
     fun migrateIfNeeded(ctx: Context, p: Prefs) {
         if (all(ctx).isNotEmpty()) return

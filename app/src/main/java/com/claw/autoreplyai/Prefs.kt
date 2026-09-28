@@ -51,6 +51,54 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getString("safetyRule", DEFAULT_SAFETY) ?: DEFAULT_SAFETY
         set(v) = sp.edit().putString("safetyRule", v.trim()).apply()
 
+    // ---------- which apps to answer ----------
+    /** Answer WhatsApp (and WhatsApp Business) messages. */
+    var replyWhatsApp: Boolean
+        get() = sp.getBoolean("replyWhatsApp", true)
+        set(v) = sp.edit().putBoolean("replyWhatsApp", v).apply()
+
+    /** Answer Facebook Messenger messages. */
+    var replyMessenger: Boolean
+        get() = sp.getBoolean("replyMessenger", true)
+        set(v) = sp.edit().putBoolean("replyMessenger", v).apply()
+
+    /** Answer Telegram messages. */
+    var replyTelegram: Boolean
+        get() = sp.getBoolean("replyTelegram", true)
+        set(v) = sp.edit().putBoolean("replyTelegram", v).apply()
+
+    /** Answer Instagram direct messages. */
+    var replyInstagram: Boolean
+        get() = sp.getBoolean("replyInstagram", true)
+        set(v) = sp.edit().putBoolean("replyInstagram", v).apply()
+
+    // ---------- voice notes ----------
+    /**
+     * Transcribe incoming WhatsApp voice notes and answer the text.
+     * Needs the audio permission; silently degrades to the old behaviour when the
+     * file cannot be found or the provider has no transcription endpoint.
+     */
+    var transcribeVoice: Boolean
+        get() = sp.getBoolean("transcribeVoice", true)
+        set(v) = sp.edit().putBoolean("transcribeVoice", v).apply()
+
+    /** Model used for `/audio/transcriptions` (OpenAI-compatible). */
+    var transcribeModel: String
+        get() = sp.getString("transcribeModel", "whisper-1") ?: "whisper-1"
+        set(v) = sp.edit().putString("transcribeModel", v.trim()).apply()
+
+    // ---------- language ----------
+    /** Answer in the language the incoming message was written in. */
+    var autoLanguage: Boolean
+        get() = sp.getBoolean("autoLanguage", true)
+        set(v) = sp.edit().putBoolean("autoLanguage", v).apply()
+
+    // ---------- approval ----------
+    /** Show the drafted reply for approval instead of sending it automatically. */
+    var approvalMode: Boolean
+        get() = sp.getBoolean("approvalMode", false)
+        set(v) = sp.edit().putBoolean("approvalMode", v).apply()
+
     // ---------- filtering ----------
     var onlyContacts: Boolean
         get() = sp.getBoolean("onlyContacts", false)

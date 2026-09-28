@@ -38,6 +38,9 @@ class AiFragment : BaseSettingsFragment() {
         b.switchTriage.setOnCheckedChangeListener { _, v -> prefs.smartTriage = v }
         b.switchHold.setOnCheckedChangeListener { _, v -> prefs.holdOnEmotional = v }
         b.switchFailAlert.setOnCheckedChangeListener { _, v -> prefs.failAlert = v }
+        b.switchTranscribe.setOnCheckedChangeListener { _, v -> prefs.transcribeVoice = v }
+        b.switchAutoLanguage.setOnCheckedChangeListener { _, v -> prefs.autoLanguage = v }
+        b.switchApproval.setOnCheckedChangeListener { _, v -> prefs.approvalMode = v }
 
         b.btnAddProvider.setOnClickListener { addProvider() }
         b.btnDeleteProvider.setOnClickListener { deleteProvider() }
@@ -59,6 +62,10 @@ class AiFragment : BaseSettingsFragment() {
         b.switchTriage.isChecked = prefs.smartTriage
         b.switchHold.isChecked = prefs.holdOnEmotional
         b.switchFailAlert.isChecked = prefs.failAlert
+        b.switchTranscribe.isChecked = prefs.transcribeVoice
+        b.switchAutoLanguage.isChecked = prefs.autoLanguage
+        b.switchApproval.isChecked = prefs.approvalMode
+        b.etTranscribeModel.setText(prefs.transcribeModel)
         b.etPersona.setText(prefs.persona)
 
         refreshProviderSpinner()
@@ -90,6 +97,7 @@ class AiFragment : BaseSettingsFragment() {
         }
 
         prefs.persona = b.etPersona.text?.toString().orEmpty().ifBlank { Prefs.DEFAULT_PERSONA }
+        prefs.transcribeModel = b.etTranscribeModel.text?.toString().orEmpty().ifBlank { "whisper-1" }
     }
 
     private fun refreshProviderSpinner() {

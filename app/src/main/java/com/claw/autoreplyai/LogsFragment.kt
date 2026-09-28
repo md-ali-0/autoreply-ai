@@ -7,7 +7,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.claw.autoreplyai.databinding.FragmentLogsBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LogsFragment : BaseSettingsFragment() {
 
@@ -29,10 +34,43 @@ class LogsFragment : BaseSettingsFragment() {
             LogStore.clear(requireContext())
             refresh()
         }
+        b.btnDigest.setOnClickListener { showDigest() }
         b.btnProbe.setOnClickListener {
             WhatsAppNotificationListener.probe(requireContext())
             ReplySelfTest.run(requireContext())
             refresh()
+        }
+    }
+
+    /** Builds the "what did I miss" brief, posts it, and shows it on screen. */
+    private fun showDigest() {
+        val ctx = requireContext()
+        toast(getString(R.string.digest_working))
+        viewLifecycleOwner.lifecycleScope.launch {
+            val summary = withContext(Dispatchers.IO) {
+                try {
+                    Digest.build(ctx.applicationContext, useAi = true)
+                } catch (e: Exception) {
+                    LogStore.add(ctx, "ডাইজেস্ট ব্যর্থ: ${e.message}")
+                    null
+                }
+            }
+            if (!isAdded) return@launch
+            if (summary == null) {
+                toast(getString(R.string.digest_failed))
+                return@launch
+            }
+            Notify.digest(ctx, summary)
+            refresh()
+            try {
+                MaterialAlertDialogBuilder(ctx)
+                    .setTitle(R.string.digest_title)
+                    .setMessage(summary)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            } catch (_: Exception) {
+                // a dialog failure must not lose the digest — it is in the log too
+            }
         }
     }
 

@@ -8,7 +8,12 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 /**
- * Catches WhatsApp notifications and extracts (sender, message, phone number).
+ * Catches notifications from the supported chat apps (WhatsApp, Messenger) and
+ * extracts (app, sender, message, phone number, reply handles).
+ *
+ * NOTE: the class is still called `WhatsAppNotificationListener` on purpose —
+ * the notification-access grant is stored by *component name*, so renaming it
+ * would silently revoke the permission on every installed device.
  */
 class WhatsAppNotificationListener : NotificationListenerService() {
 
@@ -21,7 +26,7 @@ class WhatsAppNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         instance = this
-        // Useful diagnostics: does WhatsApp actually give us a reply action here?
+        // Useful diagnostics: does the chat app actually give us a reply action here?
         probeActiveNotifications()
     }
 
@@ -31,24 +36,25 @@ class WhatsAppNotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Reports whether the WhatsApp notifications currently in the shade expose a
+     * Reports whether the chat notifications currently in the shade expose a
      * free-form reply action. If they do, replies work even while the phone is
      * locked; if not, the app has to fall back to driving the UI.
      */
     fun probeActiveNotifications() {
         try {
             val actives = activeNotifications ?: return
-            val wa = actives.filter { it.packageName == WA || it.packageName == WAB }
-            if (wa.isEmpty()) {
-                LogStore.add(applicationContext, "পরীক্ষা: এখন কোনো WhatsApp নোটিফিকেশন নেই")
+            val chats = actives.filter { MessagingApps.isSupported(it.packageName) }
+            if (chats.isEmpty()) {
+                LogStore.add(applicationContext, "পরীক্ষা: এখন কোনো চ্যাট নোটিফিকেশন নেই")
                 return
             }
-            for (sbn in wa) {
+            for (sbn in chats) {
                 val n = sbn.notification
                 val hasReply = DirectReplier.findReplyAction(n) != null
                 LogStore.add(
                     applicationContext,
-                    "পরীক্ষা: WhatsApp নোটিফিকেশন — actions=${n.actions?.size ?: 0}, " +
+                    "পরীক্ষা: ${MessagingApps.label(sbn.packageName)} নোটিফিকেশন — " +
+                            "actions=${n.actions?.size ?: 0}, " +
                             "সরাসরি reply ${if (hasReply) "আছে ✓" else "নেই ✗"}"
                 )
             }
@@ -60,16 +66,18 @@ class WhatsAppNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
         val pkg = sbn.packageName ?: return
-        if (pkg != WA && pkg != WAB) return
+        if (!MessagingApps.isSupported(pkg)) return
 
         val n = sbn.notification ?: return
         if ((n.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return
         val extras = n.extras ?: return
 
+        val appLabel = MessagingApps.label(pkg)
+
         var title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
         var text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
 
-        if (title.isBlank() || title.equals("WhatsApp", true)) return
+        if (title.isBlank() || title.equals(appLabel, true)) return
 
         var phoneHint: String? = null
         var groupBySender = false
@@ -93,16 +101,20 @@ class WhatsAppNotificationListener : NotificationListenerService() {
                         if (title.isBlank()) title = pName
                     }
                 } else {
-                    // sender_person == null → this is an OUTGOING (own) message
-                    ownMessage = true
+                    // sender_person == null → this is an OUTGOING (own) message.
+                    // Only WhatsApp is known to behave this way; for other apps a
+                    // missing sender field just means the app didn't fill it in, so
+                    // treating it as "own" would drop real incoming messages. Those
+                    // apps rely on the content match below instead.
+                    if (MessagingApps.usesOwnMessageHeuristic(pkg)) ownMessage = true
                 }
             }
         }
 
-        // Skip our own replies — WhatsApp posts a new notification when we send a reply,
-        // and if we don't skip it the bot replies to itself in an infinite loop.
-        // Layer 1: sender_person == null often means our own message.
-        // Layer 2: exact text match against recently sent messages (more reliable).
+        // Skip our own replies — the chat app posts a new notification when we send
+        // a reply, and if we don't skip it the bot replies to itself in an infinite loop.
+        // Layer 1: sender_person == null often means our own message (WhatsApp only).
+        // Layer 2: exact/fuzzy text match against recently sent messages (reliable everywhere).
         if (ownMessage) {
             LogStore.add(applicationContext, "নিজের মেসেজ বাদ (sender_person=null) — $title")
             return
@@ -127,15 +139,28 @@ class WhatsAppNotificationListener : NotificationListenerService() {
             }
         }
 
+        // Skip call events — they are not messages and the AI wrongly classifies
+        // them as urgent ("missed call" sounds like an emergency).
+        if (CallEventFilter.isCallEvent(text)) {
+            LogStore.add(applicationContext, "কল ইভেন্ট বাদ — $title: ${text.take(40)}")
+            return
+        }
+
+        // Also drop notifications that Android itself marks as calls.
+        if (n.category == Notification.CATEGORY_CALL) {
+            LogStore.add(applicationContext, "কল ক্যাটেগরির নোটিফিকেশন বাদ — $title")
+            return
+        }
+
         if (title.isBlank() || text.isBlank()) return
 
         val isGroup = extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false) ||
                 extras.getBoolean("isGroupConversation", false) ||
                 groupBySender
 
-        // ---- de-duplicate: WhatsApp often re-posts the same notification ----
+        // ---- de-duplicate: chat apps often re-post the same notification ----
         val now = System.currentTimeMillis()
-        val hash = "$title|$text"
+        val hash = "$pkg|$title|$text"
 
         // Clean old entries
         val iter = recentHashes.iterator()
@@ -160,8 +185,16 @@ class WhatsAppNotificationListener : NotificationListenerService() {
         // Capture the inline-reply action while the notification is still live.
         val directReply = DirectReplier.findReplyAction(n)
 
+        // ...and the content intent, which is the only way back into a Messenger
+        // conversation once the notification's inline reply is unavailable.
+        val contentIntent = try {
+            n.contentIntent
+        } catch (e: Exception) {
+            null
+        }
+
         ReplyEngine.onIncoming(
-            applicationContext, pkg, title, text, isGroup, phoneHint, directReply
+            applicationContext, pkg, title, text, isGroup, phoneHint, directReply, contentIntent
         )
     }
 
@@ -171,9 +204,6 @@ class WhatsAppNotificationListener : NotificationListenerService() {
     }
 
     companion object {
-        private const val WA = "com.whatsapp"
-        private const val WAB = "com.whatsapp.w4b"
-
         @Volatile
         private var instance: WhatsAppNotificationListener? = null
 

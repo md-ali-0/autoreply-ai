@@ -2,6 +2,7 @@ package com.claw.autoreplyai
 
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -14,9 +15,12 @@ import android.view.accessibility.AccessibilityNodeInfo
 import java.net.URLEncoder
 
 /**
- * Drives the real WhatsApp UI:
- *  1. opens the chat via a wa.me deep link (reply text pre-filled)
- *  2. waits for the chat window, taps the Send button
+ * Drives the real chat app UI when the notification has no usable inline-reply
+ * action:
+ *  1. opens the conversation — either through a `wa.me` deep link (WhatsApp, the
+ *     reply text comes pre-filled) or through the notification's own content
+ *     intent (Messenger, where no phone-number link exists),
+ *  2. waits for the chat window, then types the text (if needed) and taps Send.
  *
  * This is the only way to send on behalf of the user without root or the official
  * WhatsApp Business Cloud API.
@@ -25,8 +29,9 @@ class SendAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var deadline = 0L
-    private var targetPkg = WA
+    private var targetPkg = MessagingApps.WHATSAPP
     private var pendingText = ""
+    private var textPrefilled = false
     private var pendingResult: ((Boolean) -> Unit)? = null
     private var attempts = 0
 
@@ -42,7 +47,7 @@ class SendAccessibilityService : AccessibilityService() {
             return
         }
         val pkg = event?.packageName?.toString() ?: return
-        if (pkg != WA && pkg != WAB) return
+        if (pkg != targetPkg) return
         tick()
     }
 
@@ -55,9 +60,50 @@ class SendAccessibilityService : AccessibilityService() {
 
     // ------------------------------------------------------------------ send
 
-    private fun dispatch(pkg: String, waNumber: String, text: String, onResult: (Boolean) -> Unit): Boolean {
-        targetPkg = if (pkg.contains("w4b")) WAB else WA
+    /**
+     * WhatsApp route: a wa.me link both opens the chat and pre-fills the text, so
+     * the only thing left to do is tap Send.
+     */
+    private fun dispatch(pkg: String, number: String, text: String, onResult: (Boolean) -> Unit): Boolean {
+        val encoded = try {
+            URLEncoder.encode(text, "UTF-8")
+        } catch (e: Exception) {
+            text
+        }
+        val intent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://wa.me/$number?text=$encoded")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            setPackage(pkg)
+        }
+        return launch(pkg, intent, text, prefilled = true, onResult = onResult, what = "WhatsApp চ্যাট")
+    }
+
+    /**
+     * Messenger route: there is no phone-number link, so reopen the conversation
+     * through the notification's content intent and type the reply in.
+     */
+    private fun dispatchOpen(
+        pkg: String,
+        open: PendingIntent,
+        text: String,
+        onResult: (Boolean) -> Unit
+    ): Boolean {
+        return launch(pkg, open, text, prefilled = false, onResult = onResult, what = "চ্যাট")
+    }
+
+    private fun launch(
+        pkg: String,
+        target: Any,
+        text: String,
+        prefilled: Boolean,
+        onResult: (Boolean) -> Unit,
+        what: String
+    ): Boolean {
+        targetPkg = pkg
         pendingText = text
+        textPrefilled = prefilled
         pendingResult = onResult
         attempts = 0
         deadline = System.currentTimeMillis() + TIMEOUT_MS
@@ -75,24 +121,17 @@ class SendAccessibilityService : AccessibilityService() {
 
         wakeScreen()
 
-        val encoded = try {
-            URLEncoder.encode(text, "UTF-8")
-        } catch (e: Exception) {
-            text
-        }
-
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$waNumber?text=$encoded")).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            setPackage(targetPkg)
-        }
-
         return try {
-            startActivity(intent)
-            LogStore.add(applicationContext, "WhatsApp চ্যাট খোলা হচ্ছে → $waNumber")
+            when (target) {
+                is Intent -> startActivity(target)
+                is PendingIntent -> target.send()
+                else -> return false
+            }
+            LogStore.add(applicationContext, "${MessagingApps.label(pkg)} $what খোলা হচ্ছে")
             scheduleTick()
             true
         } catch (e: Exception) {
-            LogStore.add(applicationContext, "WhatsApp খোলা যায়নি: ${e.message}")
+            LogStore.add(applicationContext, "চ্যাট খোলা যায়নি: ${e.message}")
             finish(false)
             false
         }
@@ -133,24 +172,30 @@ class SendAccessibilityService : AccessibilityService() {
         attempts++
         val root = rootInActiveWindow ?: return
         val pkgNow = root.packageName?.toString()
-        if (pkgNow != WA && pkgNow != WAB) return
+        if (pkgNow != targetPkg) return
 
-        // 1. try to tap send (text already pre-filled by the deep link)
+        // 1. Tap Send if the text is already there (deep link) or once we typed it.
         if (clickSend(root)) return
 
-        // 2. fallback: type the text into the composer, then send on a later tick
-        if (attempts >= 3) {
-            val entry = findById(root, "entry") ?: findById(root, "input")
+        // 2. Type the text into the composer, then send on a later tick.
+        if (attempts >= 2) {
+            val entry = findComposer(root)
             if (entry != null) {
                 val args = Bundle()
                 args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, pendingText)
-                entry.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+                if (entry.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+                    textPrefilled = true
+                }
             }
         }
     }
 
     private fun clickSend(root: AccessibilityNodeInfo): Boolean {
-        val node = findById(root, "send") ?: findByDescription(root)
+        // Never tap Send before the composer actually holds our text — otherwise
+        // the tap lands on an empty composer and reports a false success.
+        if (!textPrefilled) return false
+
+        val node = findById(root, SEND_IDS) ?: findByDescription(root)
         if (node == null) return false
         val ok = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         if (ok) {
@@ -170,12 +215,12 @@ class SendAccessibilityService : AccessibilityService() {
 
     // ------------------------------------------------------------- tree utils
 
-    private fun findById(node: AccessibilityNodeInfo, suffix: String): AccessibilityNodeInfo? {
+    private fun findById(node: AccessibilityNodeInfo, suffixes: List<String>): AccessibilityNodeInfo? {
         val id = node.viewIdResourceName
-        if (id != null && id.endsWith(":id/$suffix") && node.isClickable) return node
+        if (id != null && node.isClickable && suffixes.any { id.endsWith(":id/$it") }) return node
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            val hit = findById(child, suffix)
+            val hit = findById(child, suffixes)
             if (hit != null) return hit
         }
         return null
@@ -183,9 +228,7 @@ class SendAccessibilityService : AccessibilityService() {
 
     private fun findByDescription(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         val desc = node.contentDescription?.toString()?.lowercase()
-        if (!desc.isNullOrBlank() && node.isClickable &&
-            (desc.contains("send") || desc.contains("পাঠান") || desc.contains("পাঠাও"))
-        ) {
+        if (!desc.isNullOrBlank() && node.isClickable && SEND_WORDS.any { desc.contains(it) }) {
             return node
         }
         for (i in 0 until node.childCount) {
@@ -196,12 +239,39 @@ class SendAccessibilityService : AccessibilityService() {
         return null
     }
 
+    /**
+     * The message box. Known ids first (WhatsApp: `entry`; Messenger:
+     * `row_input_text`), then any editable field that is not a search box.
+     */
+    private fun findComposer(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        findById(node, COMPOSER_IDS)?.let { return it }
+        return firstEditable(node)
+    }
+
+    private fun firstEditable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val cls = node.className?.toString().orEmpty()
+        val hint = node.hintText?.toString()?.lowercase().orEmpty()
+        val looksLikeSearch = cls.contains("SearchView") ||
+                hint.contains("search") || hint.contains("খুঁজ")
+        if (node.isEditable && !looksLikeSearch && cls.contains("EditText")) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val hit = firstEditable(child)
+            if (hit != null) return hit
+        }
+        return null
+    }
+
     companion object {
-        private const val WA = "com.whatsapp"
-        private const val WAB = "com.whatsapp.w4b"
         private const val TIMEOUT_MS = 25_000L
         private const val TICK_MS = 700L
         private const val WAKE_MS = 20_000L
+
+        private val SEND_IDS = listOf("send", "btn_send", "send_button", "button_send", "sendbutton")
+        private val COMPOSER_IDS = listOf(
+            "entry", "input", "row_input_text", "message_input", "edit_text", "composer", "message"
+        )
+        private val SEND_WORDS = listOf("send", "পাঠান", "পাঠাও", "送出", "enviar")
 
         @Volatile
         private var instance: SendAccessibilityService? = null
@@ -209,17 +279,38 @@ class SendAccessibilityService : AccessibilityService() {
         fun isRunning(): Boolean = instance != null
 
         /**
-         * Fire-and-forget from the caller's perspective; [onResult] is invoked on the
-         * main thread with true only after the Send button was actually tapped.
+         * WhatsApp: open a wa.me link (text pre-filled) and tap Send.
+         * Fire-and-forget from the caller's perspective; [onResult] is invoked on
+         * the main thread with true only after the Send button was actually tapped.
          */
-        fun send(ctx: Context, pkg: String, waNumber: String, text: String, onResult: (Boolean) -> Unit) {
+        fun send(ctx: Context, pkg: String, number: String, text: String, onResult: (Boolean) -> Unit) {
             val svc = instance
             if (svc == null) {
                 LogStore.add(ctx, "অ্যাক্সেসিবিলিটি সার্ভিস চালু নেই")
                 onResult(false)
                 return
             }
-            svc.handler.post { svc.dispatch(pkg, waNumber, text, onResult) }
+            svc.handler.post { svc.dispatch(pkg, number, text, onResult) }
+        }
+
+        /**
+         * Messenger: reopen the conversation through the notification's content
+         * intent, type the reply, then tap Send.
+         */
+        fun sendViaIntent(
+            ctx: Context,
+            pkg: String,
+            open: PendingIntent,
+            text: String,
+            onResult: (Boolean) -> Unit
+        ) {
+            val svc = instance
+            if (svc == null) {
+                LogStore.add(ctx, "অ্যাক্সেসিবিলিটি সার্ভিস চালু নেই")
+                onResult(false)
+                return
+            }
+            svc.handler.post { svc.dispatchOpen(pkg, open, text, onResult) }
         }
     }
 }

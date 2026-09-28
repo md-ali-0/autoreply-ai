@@ -1,5 +1,6 @@
 package com.claw.autoreplyai
 
+import android.content.Context
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -60,5 +61,28 @@ object AiClient {
                 ?: throw IOException("message ফিল্ড নেই")
             return message.optString("content", "").trim()
         }
+    }
+
+    /**
+     * Same call, but walks the saved provider list (selected first) until one
+     * answers. Used by one-off features such as the digest, where a per-request
+     * provider switch would be surprising.
+     */
+    @Throws(IOException::class)
+    fun askWithFallback(ctx: Context, messages: List<Msg>): String {
+        val ordered = AiProviderStore.prioritized(ctx)
+        if (ordered.isEmpty()) throw IOException("কোনো AI প্রোভাইডার সেট আপ নেই")
+
+        var last: Exception? = null
+        for (provider in ordered) {
+            try {
+                val out = chat(provider.baseUrl, provider.apiKey, provider.model, messages)
+                if (out.isNotBlank()) return out
+                last = IOException("${provider.name} খালি উত্তর দিয়েছে")
+            } catch (e: Exception) {
+                last = e
+            }
+        }
+        throw last ?: IOException("সব প্রোভাইডার ব্যর্থ")
     }
 }

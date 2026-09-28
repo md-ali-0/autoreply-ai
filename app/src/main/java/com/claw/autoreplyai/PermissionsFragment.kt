@@ -47,13 +47,57 @@ class PermissionsFragment : BaseSettingsFragment() {
         b.rowContacts.setOnClickListener { askContacts() }
         b.rowBattery.setOnClickListener { requestBatteryExemption() }
         b.rowOverlay.setOnClickListener { requestOverlay() }
+        b.rowAudio.setOnClickListener { askAudio() }
+
+        // These persist immediately on toggle — this tab has no Save button of its
+        // own, and the choice must stick even if Save is never pressed.
+        b.switchWhatsApp.setOnCheckedChangeListener { _, checked ->
+            prefs.replyWhatsApp = checked
+            LogStore.add(
+                requireContext(),
+                if (checked) "WhatsApp-এ অটো-রিপ্লাই চালু" else "WhatsApp-এ অটো-রিপ্লাই বন্ধ"
+            )
+        }
+        b.switchMessenger.setOnCheckedChangeListener { _, checked ->
+            prefs.replyMessenger = checked
+            LogStore.add(
+                requireContext(),
+                if (checked) "Messenger-এ অটো-রিপ্লাই চালু" else "Messenger-এ অটো-রিপ্লাই বন্ধ"
+            )
+        }
+        b.switchTelegram.setOnCheckedChangeListener { _, checked ->
+            prefs.replyTelegram = checked
+            LogStore.add(
+                requireContext(),
+                if (checked) "Telegram-এ অটো-রিপ্লাই চালু" else "Telegram-এ অটো-রিপ্লাই বন্ধ"
+            )
+        }
+        b.switchInstagram.setOnCheckedChangeListener { _, checked ->
+            prefs.replyInstagram = checked
+            LogStore.add(
+                requireContext(),
+                if (checked) "Instagram-এ অটো-রিপ্লাই চালু" else "Instagram-এ অটো-রিপ্লাই বন্ধ"
+            )
+        }
+
         askRuntimePermissions()
     }
 
-    override fun load() = refresh()
+    override fun load() {
+        b.switchWhatsApp.isChecked = prefs.replyWhatsApp
+        b.switchMessenger.isChecked = prefs.replyMessenger
+        b.switchTelegram.isChecked = prefs.replyTelegram
+        b.switchInstagram.isChecked = prefs.replyInstagram
+        refresh()
+    }
 
     override fun save() {
-        // nothing to persist — permissions live in the system
+        // The app switches are written on toggle; permissions live in the system.
+        if (!viewReady) return
+        prefs.replyWhatsApp = b.switchWhatsApp.isChecked
+        prefs.replyMessenger = b.switchMessenger.isChecked
+        prefs.replyTelegram = b.switchTelegram.isChecked
+        prefs.replyInstagram = b.switchInstagram.isChecked
     }
 
     override fun onShown() = refresh()
@@ -71,18 +115,21 @@ class PermissionsFragment : BaseSettingsFragment() {
         val contacts = ContactResolver.hasPermission(requireContext())
         val battery = isIgnoringBattery()
         val overlay = Settings.canDrawOverlays(requireContext())
+        val audio = VoiceTranscriber.hasAudioPermission(requireContext())
 
         setState(b.tvNotifState, b.dotNotif, notif)
         setState(b.tvAccState, b.dotAcc, acc)
         setState(b.tvContactsState, b.dotContacts, contacts)
         setState(b.tvBatteryState, b.dotBattery, battery)
         setState(b.tvOverlayState, b.dotOverlay, overlay)
+        setState(b.tvAudioState, b.dotAudio, audio)
 
-        val done = listOf(notif, acc, contacts, battery, overlay).count { it }
-        b.tvPermSummary.text = if (done == 5) {
+        val states = listOf(notif, acc, contacts, battery, overlay, audio)
+        val done = states.count { it }
+        b.tvPermSummary.text = if (done == states.size) {
             getString(R.string.perm_all_done)
         } else {
-            getString(R.string.perm_summary, done, 5)
+            getString(R.string.perm_summary, done, states.size)
         }
     }
 
@@ -161,6 +208,12 @@ class PermissionsFragment : BaseSettingsFragment() {
             != PackageManager.PERMISSION_GRANTED
         ) wanted.add(Manifest.permission.READ_CONTACTS)
 
+        audioPermission()?.let { perm ->
+            if (ContextCompat.checkSelfPermission(ctx, perm) != PackageManager.PERMISSION_GRANTED) {
+                wanted.add(perm)
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -175,5 +228,21 @@ class PermissionsFragment : BaseSettingsFragment() {
             return
         }
         permLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
+    }
+
+    private fun askAudio() {
+        val perm = audioPermission()
+        if (perm == null || VoiceTranscriber.hasAudioPermission(requireContext())) {
+            toast(getString(R.string.granted))
+            return
+        }
+        permLauncher.launch(arrayOf(perm))
+    }
+
+    /** Android 13 split audio out of storage into its own permission. */
+    private fun audioPermission(): String? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
     }
 }

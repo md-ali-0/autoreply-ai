@@ -5,6 +5,11 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Voice-note transcription reads WhatsApp's voice-note folder -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -17,6 +22,13 @@
     <queries>
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
+        <package android:name="com.facebook.orca" />
+        <package android:name="com.facebook.mlite" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="org.thunderdog.challegram" />
+        <package android:name="org.telegram.plus" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.instagram.lite" />
     </queries>
 
     <application
@@ -41,7 +53,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Reads incoming WhatsApp notifications -->
+        <!-- Reads incoming WhatsApp / Messenger notifications -->
         <service
             android:name=".WhatsAppNotificationListener"
             android:exported="true"
@@ -52,7 +64,7 @@
             </intent-filter>
         </service>
 
-        <!-- Drives the WhatsApp UI to actually send the reply -->
+        <!-- Drives the WhatsApp / Messenger UI to actually send the reply -->
         <service
             android:name=".SendAccessibilityService"
             android:exported="true"
@@ -73,11 +85,16 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="whatsapp_auto_reply_engine" />
+                android:value="chat_auto_reply_engine" />
         </service>
 
         <receiver
             android:name=".SelfTestReceiver"
+            android:exported="false" />
+
+        <!-- Handles the "পাঠাও" / "বাতিল" actions on an approval notification -->
+        <receiver
+            android:name=".ApprovalReceiver"
             android:exported="false" />
 
         <receiver

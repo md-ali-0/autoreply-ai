@@ -4,7 +4,7 @@
 
     <string name="svc_notif_label">AutoReply AI — মেসেজ রিডার</string>
     <string name="svc_acc_label">AutoReply AI — রিপ্লাই সেন্ডার</string>
-    <string name="accessibility_description">WhatsApp-এ স্বয়ংক্রিয়ভাবে রিপ্লাই পাঠাতে এই সার্ভিসটি দরকার। এটি শুধু আপনার নিজের অ্যাপ চালু করা চ্যাট উইন্ডোতে \'Send\' বাটনে ট্যাপ করে।</string>
+    <string name="accessibility_description">WhatsApp ও Messenger-এ স্বয়ংক্রিয়ভাবে রিপ্লাই পাঠাতে এই সার্ভিসটি দরকার। এটি শুধু আপনার নিজের অ্যাপ চালু করা চ্যাট উইন্ডোতে \'Send\' বাটনে ট্যাপ করে।</string>
 
     <string name="status_title">সার্ভিস স্ট্যাটাস</string>
     <string name="notif_access">নোটিফিকেশন অ্যাক্সেস</string>
@@ -73,13 +73,13 @@
     <string name="no_logs">এখনো কোনো লগ নেই।</string>
 
     <string name="fgs_title">AutoReply AI চালু আছে</string>
-    <string name="fgs_text">WhatsApp মেসেজ মনিটর করা হচ্ছে…</string>
+    <string name="fgs_text">WhatsApp · Messenger · Telegram · Instagram মনিটর করা হচ্ছে…</string>
 
     <string name="help_title">কীভাবে চালাবেন</string>
-    <string name="help_body">১) উপরের ৫টি অনুমতি চালু করুন।\n২) AI ট্যাবে API Key ও মডেল দিন।\n৩) মাস্টার সুইচ চালু করে সেভ করুন।\n৪) ফোন রিস্টার্ট দিলেও অ্যাপ নিজে থেকে চালু হবে।\n\nস্ক্রিন বন্ধ থাকলেও রিপ্লাই যায় — অ্যাপ নোটিফিকেশন থেকেই সরাসরি পাঠায়।\n\nতবে PIN/ফিঙ্গারপ্রিন্ট দিয়ে ফোন লক করা থাকলে Android নিরাপত্তার কারণে রিপ্লাই পাঠানো যায় না। তাই কাজের সময় ফোন লক না রেখে স্মার্ট লক (trusted place) ব্যবহার করুন।</string>
+    <string name="help_body">১) উপরের ৬টি অনুমতি চালু করুন।\n২) AI ট্যাবে API Key ও মডেল দিন।\n৩) মাস্টার সুইচ চালু করে সেভ করুন।\n৪) ফোন রিস্টার্ট দিলেও অ্যাপ নিজে থেকে চালু হবে।\n\nস্ক্রিন বন্ধ থাকলেও রিপ্লাই যায় — অ্যাপ নোটিফিকেশন থেকেই সরাসরি পাঠায়।\n\nতবে PIN/ফিঙ্গারপ্রিন্ট দিয়ে ফোন লক করা থাকলে Android নিরাপত্তার কারণে রিপ্লাই পাঠানো যায় না। তাই কাজের সময় ফোন লক না রেখে স্মার্ট লক (trusted place) ব্যবহার করুন।</string>
 
     <!-- ===== v1.2 UI ===== -->
-    <string name="hero_subtitle">WhatsApp · AI অটো-রিপ্লাই ইঞ্জিন</string>
+    <string name="hero_subtitle">WhatsApp · Messenger · AI অটো-রিপ্লাই</string>
     <string name="state_on">চালু আছে</string>
     <string name="state_off">বন্ধ আছে</string>
     <string name="mood_sleeping">ঘুমের মোড</string>
@@ -115,7 +115,36 @@
     <string name="ctx_body_hint">কন্টেক্সট / নির্দেশনা</string>
     <string name="ctx_body_helper">এই কন্টাক্ট কে, সম্পর্ক কী, কীভাবে কথা বলবেন</string>
 
-    <string name="perm_intro">এই ৫টি অনুমতি ছাড়া অ্যাপ কাজ করবে না। প্রতিটা রো-তে ট্যাপ করে চালু করুন।</string>
+    <string name="perm_intro">এই ৬টি অনুমতি ছাড়া অ্যাপ পুরোপুরি কাজ করবে না। প্রতিটা রো-তে ট্যাপ করে চালু করুন।</string>
+
+    <!-- ===== which apps ===== -->
+    <string name="apps_title">কোন অ্যাপে রিপ্লাই দেবে</string>
+    <string name="apps_sub">যে অ্যাপের সুইচ বন্ধ থাকবে, সেখান থেকে মেসেজ এলে কিছু পাঠানো হবে না।</string>
+    <string name="app_whatsapp">WhatsApp</string>
+    <string name="app_messenger">Messenger</string>
+    <string name="app_whatsapp_sub">WhatsApp ও WhatsApp Business দুটোই</string>
+    <string name="app_messenger_sub">Facebook Messenger ও Messenger Lite</string>
+    <string name="app_telegram">Telegram</string>
+    <string name="app_telegram_sub">Telegram ও Telegram X</string>
+    <string name="app_instagram">Instagram</string>
+    <string name="app_instagram_sub">Instagram ডাইরেক্ট মেসেজ</string>
+
+    <!-- ===== voice / language / approval ===== -->
+    <string name="voice_transcribe">ভয়েস মেসেজ পড়ে উত্তর দেবে</string>
+    <string name="voice_transcribe_sub">ভয়েস মেসেজ এলে টেক্সট বানিয়ে AI উত্তর দেবে। এখন শুধু WhatsApp-এর ভয়েস নোট পড়া যায়।</string>
+    <string name="voice_model">ট্রান্সক্রিপশন মডেল</string>
+    <string name="voice_model_hint">OpenAI-compatible /audio/transcriptions — যেমন whisper-1</string>
+    <string name="auto_language">কন্টাক্টের ভাষায় উত্তর</string>
+    <string name="auto_language_sub">ইংরেজিতে লিখলে ইংরেজিতে, বাংলায় লিখলে বাংলায়। বন্ধ থাকলে সবসময় বাংলায়।</string>
+    <string name="approval_mode">পাঠানোর আগে অনুমোদন নেবে</string>
+    <string name="approval_mode_sub">AI নিজে পাঠাবে না — নোটিফিকেশনে খসড়া দেখাবে, আপনি "পাঠাও" চাপলে যাবে।</string>
+    <string name="audio_perm">ভয়েস মেসেজ পড়ার অনুমতি</string>
+
+    <!-- ===== digest ===== -->
+    <string name="digest_button">কী মিস করলাম?</string>
+    <string name="digest_title">কী মিস করলাম</string>
+    <string name="digest_working">ডাইজেস্ট বানানো হচ্ছে…</string>
+    <string name="digest_failed">ডাইজেস্ট বানানো যায়নি</string>
     <string name="logs_intro">কোন মেসেজে কী রিপ্লাই গেল, কোথায় আটকালো — সব এখানে।</string>
     <string name="ai_intro">যেকোনো OpenAI-compatible এন্ডপয়েন্ট চলবে — OpenAI, OpenRouter, Groq, DeepSeek, Together।</string>
     <string name="contacts_intro">ডিফল্টে সবার মেসেজে রিপ্লাই যাবে। নির্দিষ্ট কিছু মানুষকে রিপ্লাই দিতে চাইলে নিচের সুইচ চালু করে নাম লিখুন।</string>
