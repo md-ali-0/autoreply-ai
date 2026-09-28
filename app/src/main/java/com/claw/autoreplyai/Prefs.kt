@@ -87,6 +87,21 @@ class Prefs private constructor(ctx: Context) {
         get() = sp.getString("transcribeModel", "whisper-1") ?: "whisper-1"
         set(v) = sp.edit().putString("transcribeModel", v.trim()).apply()
 
+    /**
+     * Optional dedicated endpoint for transcription. Most cheap chat gateways do
+     * not implement `/audio/transcriptions` at all (they answer 404), so voice notes
+     * need somewhere else to go — e.g. Groq (`https://api.groq.com/openai/v1`) or
+     * OpenAI. Left blank, the chat provider is used as before.
+     */
+    var transcribeBaseUrl: String
+        get() = sp.getString("transcribeBaseUrl", "") ?: ""
+        set(v) = sp.edit().putString("transcribeBaseUrl", v.trim()).apply()
+
+    /** Key for [transcribeBaseUrl]; blank falls back to the chat provider's key. */
+    var transcribeApiKey: String
+        get() = sp.getString("transcribeApiKey", "") ?: ""
+        set(v) = sp.edit().putString("transcribeApiKey", v.trim()).apply()
+
     // ---------- language ----------
     /** Answer in the language the incoming message was written in. */
     var autoLanguage: Boolean

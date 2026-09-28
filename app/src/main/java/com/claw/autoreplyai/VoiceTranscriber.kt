@@ -179,9 +179,13 @@ object VoiceTranscriber {
     }
 
     private fun upload(p: Prefs, file: File): String {
-        if (p.baseUrl.isBlank()) throw IOException("API Base URL খালি")
+        // Prefer a dedicated transcription endpoint; most cheap chat gateways have
+        // no /audio/transcriptions route at all.
+        val base = p.transcribeBaseUrl.ifBlank { p.baseUrl }
+        val key = p.transcribeApiKey.ifBlank { p.apiKey }
+        if (base.isBlank()) throw IOException("API Base URL খালি")
         val model = p.transcribeModel.ifBlank { "whisper-1" }
-        val url = p.baseUrl.trim().trimEnd('/') + "/audio/transcriptions"
+        val url = base.trim().trimEnd('/') + "/audio/transcriptions"
 
         val body = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -194,12 +198,18 @@ object VoiceTranscriber {
             .build()
 
         val builder = Request.Builder().url(url).post(body)
-        if (p.apiKey.isNotBlank()) builder.addHeader("Authorization", "Bearer ${p.apiKey}")
+        if (key.isNotBlank()) builder.addHeader("Authorization", "Bearer $key")
 
         val resp = client.newCall(builder.build()).execute()
         resp.use {
             val raw = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
+                if (resp.code == 404) {
+                    throw IOException(
+                        "এই প্রোভাইডারে ভয়েস ট্রান্সক্রিপশন নেই (404) — " +
+                                "AI ট্যাবে আলাদা ট্রান্সক্রিপশন এন্ডপয়েন্ট ও কী দিন"
+                    )
+                }
                 throw IOException("HTTP ${resp.code} — ${raw.take(180)}")
             }
             // Some gateways return {"text": "..."}, others nest it under a choice.

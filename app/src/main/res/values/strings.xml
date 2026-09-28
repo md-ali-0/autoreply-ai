@@ -134,6 +134,10 @@
     <string name="voice_transcribe_sub">ভয়েস মেসেজ এলে টেক্সট বানিয়ে AI উত্তর দেবে। এখন শুধু WhatsApp-এর ভয়েস নোট পড়া যায়, আর তার জন্য অনুমতি ট্যাবে "সব ফাইল পড়ার অনুমতি" চালু থাকতে হবে।</string>
     <string name="voice_model">ট্রান্সক্রিপশন মডেল</string>
     <string name="voice_model_hint">OpenAI-compatible /audio/transcriptions — যেমন whisper-1</string>
+    <string name="voice_endpoint">ট্রান্সক্রিপশন এন্ডপয়েন্ট</string>
+    <string name="voice_endpoint_hint">খালি রাখলে উপরের চ্যাট প্রোভাইডারই ব্যবহার হবে। বেশিরভাগ চ্যাট গেটওয়েতে ভয়েস ট্রান্সক্রিপশন নেই (404 দেয়) — তাই আলাদা এন্ডপয়েন্ট দিন, যেমন https://api.groq.com/openai/v1</string>
+    <string name="voice_key">ট্রান্সক্রিপশনের API Key</string>
+    <string name="voice_key_hint">খালি রাখলে চ্যাট প্রোভাইডারের কী ব্যবহার হবে</string>
     <string name="auto_language">কন্টাক্টের ভাষায় উত্তর</string>
     <string name="auto_language_sub">ইংরেজিতে লিখলে ইংরেজিতে, বাংলায় লিখলে বাংলায়। বন্ধ থাকলে সবসময় বাংলায়।</string>
     <string name="approval_mode">পাঠানোর আগে অনুমোদন নেবে</string>

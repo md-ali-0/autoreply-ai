@@ -66,6 +66,8 @@ class AiFragment : BaseSettingsFragment() {
         b.switchAutoLanguage.isChecked = prefs.autoLanguage
         b.switchApproval.isChecked = prefs.approvalMode
         b.etTranscribeModel.setText(prefs.transcribeModel)
+        b.etTranscribeBase.setText(prefs.transcribeBaseUrl)
+        b.etTranscribeKey.setText(prefs.transcribeApiKey)
         b.etPersona.setText(prefs.persona)
 
         refreshProviderSpinner()
@@ -98,6 +100,8 @@ class AiFragment : BaseSettingsFragment() {
 
         prefs.persona = b.etPersona.text?.toString().orEmpty().ifBlank { Prefs.DEFAULT_PERSONA }
         prefs.transcribeModel = b.etTranscribeModel.text?.toString().orEmpty().ifBlank { "whisper-1" }
+        prefs.transcribeBaseUrl = b.etTranscribeBase.text?.toString().orEmpty()
+        prefs.transcribeApiKey = b.etTranscribeKey.text?.toString().orEmpty()
     }
 
     private fun refreshProviderSpinner() {
